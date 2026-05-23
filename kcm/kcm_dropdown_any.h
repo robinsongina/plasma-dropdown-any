@@ -8,6 +8,8 @@
 #include <QStringList>
 #include <QVariantList>
 
+class WindowSink;
+
 class DropdownAnyKCM : public KQuickConfigModule
 {
     Q_OBJECT
@@ -34,6 +36,9 @@ Q_SIGNALS:
     void activeWindowsChanged();
     void slotsChanged();
 
+private Q_SLOTS:
+    void finalizeWindowCollection();
+
 private:
     struct SlotData {
         QString windowClass;
@@ -44,6 +49,8 @@ private:
 
     QList<SlotData> m_slots;
     QStringList     m_activeWindows;
+    WindowSink     *m_winSink = nullptr;
 
-    void fetchActiveWindows();
+    void    fetchActiveWindows();
+    QString resolveMainJsPath() const;
 };

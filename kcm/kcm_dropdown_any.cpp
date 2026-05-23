@@ -4,15 +4,29 @@
 #include <KSharedConfig>
 #include <KConfigGroup>
 
+#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
-#include <QDateTime>
 #include <QFile>
-#include <QProcess>
 #include <QSet>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QVariantMap>
+
+class WindowSink : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "local.DropdownAnyKCM.WinList")
+public:
+    explicit WindowSink(QObject *parent = nullptr) : QObject(parent) {}
+    QList<QPair<QString, QString>> buffer;
+public Q_SLOTS:
+    Q_SCRIPTABLE void receiveWindow(const QString &cls, const QString &title)
+    {
+        buffer.append({cls, title});
+    }
+};
 
 DropdownAnyKCM::DropdownAnyKCM(QObject *parent, const KPluginMetaData &data)
     : KQuickConfigModule(parent, data)
@@ -92,6 +106,17 @@ void DropdownAnyKCM::save()
             kwinGroup.deleteEntry(QStringLiteral("DropdownAny-") + oldClass);
         }
     }
+
+    // Write new shortcut entries for all non-empty slots
+    for (int i = 0; i < 10; i++) {
+        const QString cls      = m_slots[i].windowClass.trimmed();
+        const QString shortcut = m_slots[i].shortcut.trimmed();
+        if (cls.isEmpty() || shortcut.isEmpty()) continue;
+        const QString key   = QStringLiteral("DropdownAny-") + cls;
+        const QString value = shortcut + QStringLiteral(",none,Dropdown toggle: ") + cls;
+        kwinGroup.writeEntry(key, value);
+    }
+
     globalCfg->sync();
 
     // Write new slot config to kwinrc
@@ -108,12 +133,31 @@ void DropdownAnyKCM::save()
     setNeedsSave(false);
 
     // Reload the KWin script so new shortcuts get registered immediately
+    const QString mainJsPath = resolveMainJsPath();
     QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
                              QStringLiteral("/Scripting"),
                              QStringLiteral("org.kde.kwin.Scripting"),
                              QDBusConnection::sessionBus());
     scripting.call(QStringLiteral("unloadScript"), QStringLiteral("plasma-dropdown-any"));
-    scripting.call(QStringLiteral("start"));
+
+    if (mainJsPath.isEmpty()) {
+        qWarning() << "[DropdownAny] save: could not locate main.js; live reload skipped";
+        return;
+    }
+
+    QDBusReply<int> reloadReply = scripting.call(QStringLiteral("loadScript"),
+                                                  mainJsPath,
+                                                  QStringLiteral("plasma-dropdown-any"));
+    if (!reloadReply.isValid() || reloadReply.value() < 0) {
+        qWarning() << "[DropdownAny] save: loadScript failed" << reloadReply.error();
+        return;
+    }
+
+    QDBusInterface mainScript(QStringLiteral("org.kde.KWin"),
+                              QStringLiteral("/Scripting/Script%1").arg(reloadReply.value()),
+                              QStringLiteral("org.kde.kwin.Script"),
+                              QDBusConnection::sessionBus());
+    mainScript.call(QStringLiteral("run"));
 }
 
 void DropdownAnyKCM::defaults()
@@ -125,75 +169,126 @@ void DropdownAnyKCM::defaults()
 
 void DropdownAnyKCM::fetchActiveWindows()
 {
-    // Embed a unique marker per invocation to avoid matching stale journal entries
-    const QString marker = QStringLiteral("KCMWIN_%1")
-                               .arg(QDateTime::currentMSecsSinceEpoch());
+    auto bus = QDBusConnection::sessionBus();
+    const QString service = QStringLiteral("local.DropdownAnyKCM.WinList.%1")
+                                .arg(QCoreApplication::applicationPid());
+
+    // Clean up any previous sink
+    if (m_winSink) {
+        bus.unregisterObject(QStringLiteral("/WinSink"));
+        bus.unregisterService(service);
+        m_winSink->deleteLater();
+        m_winSink = nullptr;
+    }
+
+    m_winSink = new WindowSink(this);
+    if (!bus.registerService(service)) {
+        qWarning() << "[DropdownAny] WinList: registerService failed";
+        m_winSink->deleteLater();
+        m_winSink = nullptr;
+        return;
+    }
+    if (!bus.registerObject(QStringLiteral("/WinSink"), m_winSink,
+                            QDBusConnection::ExportScriptableSlots)) {
+        qWarning() << "[DropdownAny] WinList: registerObject failed";
+        bus.unregisterService(service);
+        m_winSink->deleteLater();
+        m_winSink = nullptr;
+        return;
+    }
+
+    const QString iface = QStringLiteral("local.DropdownAnyKCM.WinList");
+    const QString scriptSrc = QStringLiteral(
+        "(function() {\n"
+        "  var seen = {};\n"
+        "  var skip = {plasmashell:1, systemsettings:1, ksmserver:1};\n"
+        "  var wins = workspace.windowList();\n"
+        "  for (var i = 0; i < wins.length; i++) {\n"
+        "    var w = wins[i];\n"
+        "    var cls = w.resourceClass || '';\n"
+        "    if (!cls || skip[cls] || seen[cls]) continue;\n"
+        "    seen[cls] = 1;\n"
+        "    callDBus('%1', '/WinSink', '%2', 'receiveWindow',\n"
+        "             cls, w.caption || '');\n"
+        "  }\n"
+        "})();\n"
+    ).arg(service, iface);
 
     const QString tmpPath = QStringLiteral("/tmp/kcm_dropdown_list.js");
     QFile f(tmpPath);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
-    const QString scriptSrc = QStringLiteral(
-        "workspace.windowList().forEach(function(w) {\n"
-        "    if (w.resourceClass)\n"
-        "        print('%1:' + w.resourceClass + '|' + (w.caption || ''));\n"
-        "});\n"
-    ).arg(marker);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "[DropdownAny] WinList: could not write temp script";
+        return;
+    }
     f.write(scriptSrc.toUtf8());
     f.close();
 
     QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
                              QStringLiteral("/Scripting"),
                              QStringLiteral("org.kde.kwin.Scripting"),
-                             QDBusConnection::sessionBus());
-
-    // Unload any leftover from a previous attempt
+                             bus);
     scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kcm_list_temp"));
 
     QDBusReply<int> reply = scripting.call(QStringLiteral("loadScript"),
                                            tmpPath,
                                            QStringLiteral("kcm_list_temp"));
-    if (!reply.isValid() || reply.value() < 0) return;
+    if (!reply.isValid() || reply.value() < 0) {
+        qWarning() << "[DropdownAny] WinList: loadScript failed" << reply.error();
+        return;
+    }
 
-    const QString scriptPath = QStringLiteral("/Scripting/Script%1").arg(reply.value());
-    QDBusInterface script(QStringLiteral("org.kde.KWin"), scriptPath,
+    QDBusInterface script(QStringLiteral("org.kde.KWin"),
+                          QStringLiteral("/Scripting/Script%1").arg(reply.value()),
                           QStringLiteral("org.kde.kwin.Script"),
-                          QDBusConnection::sessionBus());
+                          bus);
     script.call(QStringLiteral("run"));
 
-    // Parse journalctl after script has had time to execute.
-    // No --since filter: it's unreliable on some systems; use unique marker instead.
-    QTimer::singleShot(800, this, [this, tmpPath, marker]() {
-        QProcess proc;
-        proc.start(QStringLiteral("journalctl"),
-                   {QStringLiteral("-t"), QStringLiteral("kwin_wayland"),
-                    QStringLiteral("-n"), QStringLiteral("500"),
-                    QStringLiteral("--no-pager")});
-        proc.waitForFinished(3000);
+    QTimer::singleShot(1500, this, &DropdownAnyKCM::finalizeWindowCollection);
+}
 
-        const QString output = QString::fromLocal8Bit(proc.readAllStandardOutput());
-        const QString prefix = marker + QLatin1Char(':');
-        QStringList windows;
-        QSet<QString> seen;
+void DropdownAnyKCM::finalizeWindowCollection()
+{
+    auto bus = QDBusConnection::sessionBus();
+    const QString service = QStringLiteral("local.DropdownAnyKCM.WinList.%1")
+                                .arg(QCoreApplication::applicationPid());
 
-        for (const QString &line : output.split(QLatin1Char('\n'))) {
-            const int idx = line.indexOf(prefix);
-            if (idx < 0) continue;
-            const QString data = line.mid(idx + prefix.size());
-            const int sep = data.indexOf(QLatin1Char('|'));
-            const QString cls   = sep >= 0 ? data.left(sep).trimmed()       : data.trimmed();
-            const QString title = sep >= 0 ? data.mid(sep + 1).left(60)     : QString();
+    QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
+                             QStringLiteral("/Scripting"),
+                             QStringLiteral("org.kde.kwin.Scripting"),
+                             bus);
+    scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kcm_list_temp"));
+    QFile::remove(QStringLiteral("/tmp/kcm_dropdown_list.js"));
+
+    QStringList windows;
+    QSet<QString> seen;
+    if (m_winSink) {
+        for (const auto &pair : std::as_const(m_winSink->buffer)) {
+            const QString cls = pair.first.trimmed();
             if (cls.isEmpty() || seen.contains(cls)) continue;
             seen.insert(cls);
-            windows << cls + QStringLiteral(" → ") + title;
+            const QString title = pair.second.left(60);
+            windows << (title.isEmpty() ? cls : cls + QStringLiteral(" → ") + title);
         }
-        windows.sort();
-        QFile::remove(tmpPath);
+    }
+    windows.sort();
 
-        if (m_activeWindows != windows) {
-            m_activeWindows = windows;
-            Q_EMIT activeWindowsChanged();
-        }
-    });
+    bus.unregisterObject(QStringLiteral("/WinSink"));
+    bus.unregisterService(service);
+    if (m_winSink) {
+        m_winSink->deleteLater();
+        m_winSink = nullptr;
+    }
+
+    if (m_activeWindows != windows) {
+        m_activeWindows = windows;
+        Q_EMIT activeWindowsChanged();
+    }
+}
+
+QString DropdownAnyKCM::resolveMainJsPath() const
+{
+    return QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+        QStringLiteral("kwin/scripts/plasma-dropdown-any/contents/code/main.js"));
 }
 
 K_PLUGIN_CLASS_WITH_JSON(DropdownAnyKCM, "kcm_dropdown_any.json")
