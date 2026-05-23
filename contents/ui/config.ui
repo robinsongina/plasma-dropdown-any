@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>700</width><height>500</height></rect>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout" stretch="0,0,1,0,0">
+
+   <!-- Column headers -->
+   <item>
+    <layout class="QHBoxLayout">
+     <item><widget class="QLabel"><property name="text"><string>#</string></property><property name="minimumWidth"><number>20</number></property></widget></item>
+     <item>
+      <widget class="QLabel">
+       <property name="text"><string>Window class</string></property>
+       <property name="minimumWidth"><number>160</number></property>
+       <property name="font"><font><bold>true</bold></font></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel">
+       <property name="text"><string>Shortcut</string></property>
+       <property name="minimumWidth"><number>110</number></property>
+       <property name="font"><font><bold>true</bold></font></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel">
+       <property name="text"><string>Width %</string></property>
+       <property name="minimumWidth"><number>70</number></property>
+       <property name="font"><font><bold>true</bold></font></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel">
+       <property name="text"><string>Height %</string></property>
+       <property name="font"><font><bold>true</bold></font></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Separator -->
+   <item>
+    <widget class="QFrame" name="line">
+     <property name="frameShape"><enum>QFrame::HLine</enum></property>
+     <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+    </widget>
+   </item>
+
+   <!-- Slots 1–10 -->
+   <item>
+    <layout class="QGridLayout" name="slotsGrid">
+
+     <!-- Slot 1 -->
+     <item row="0" column="0"><widget class="QLabel"><property name="text"><string>1</string></property></widget></item>
+     <item row="0" column="1"><widget class="QLineEdit" name="kcfg_windowClass1"><property name="placeholderText"><string>e.g. konsole</string></property></widget></item>
+     <item row="0" column="2"><widget class="QLineEdit" name="kcfg_shortcut1"><property name="placeholderText"><string>e.g. F12</string></property></widget></item>
+     <item row="0" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent1">
+       <property name="minimum"><number>10</number></property>
+       <property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property>
+       <property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="0" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent1">
+       <property name="minimum"><number>10</number></property>
+       <property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property>
+       <property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 2 -->
+     <item row="1" column="0"><widget class="QLabel"><property name="text"><string>2</string></property></widget></item>
+     <item row="1" column="1"><widget class="QLineEdit" name="kcfg_windowClass2"><property name="placeholderText"><string>e.g. kitty</string></property></widget></item>
+     <item row="1" column="2"><widget class="QLineEdit" name="kcfg_shortcut2"><property name="placeholderText"><string>e.g. Meta+F1</string></property></widget></item>
+     <item row="1" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent2">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="1" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent2">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 3 -->
+     <item row="2" column="0"><widget class="QLabel"><property name="text"><string>3</string></property></widget></item>
+     <item row="2" column="1"><widget class="QLineEdit" name="kcfg_windowClass3"></widget></item>
+     <item row="2" column="2"><widget class="QLineEdit" name="kcfg_shortcut3"></widget></item>
+     <item row="2" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent3">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="2" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent3">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 4 -->
+     <item row="3" column="0"><widget class="QLabel"><property name="text"><string>4</string></property></widget></item>
+     <item row="3" column="1"><widget class="QLineEdit" name="kcfg_windowClass4"></widget></item>
+     <item row="3" column="2"><widget class="QLineEdit" name="kcfg_shortcut4"></widget></item>
+     <item row="3" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent4">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="3" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent4">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 5 -->
+     <item row="4" column="0"><widget class="QLabel"><property name="text"><string>5</string></property></widget></item>
+     <item row="4" column="1"><widget class="QLineEdit" name="kcfg_windowClass5"></widget></item>
+     <item row="4" column="2"><widget class="QLineEdit" name="kcfg_shortcut5"></widget></item>
+     <item row="4" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent5">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="4" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent5">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 6 -->
+     <item row="5" column="0"><widget class="QLabel"><property name="text"><string>6</string></property></widget></item>
+     <item row="5" column="1"><widget class="QLineEdit" name="kcfg_windowClass6"></widget></item>
+     <item row="5" column="2"><widget class="QLineEdit" name="kcfg_shortcut6"></widget></item>
+     <item row="5" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent6">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="5" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent6">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 7 -->
+     <item row="6" column="0"><widget class="QLabel"><property name="text"><string>7</string></property></widget></item>
+     <item row="6" column="1"><widget class="QLineEdit" name="kcfg_windowClass7"></widget></item>
+     <item row="6" column="2"><widget class="QLineEdit" name="kcfg_shortcut7"></widget></item>
+     <item row="6" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent7">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="6" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent7">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 8 -->
+     <item row="7" column="0"><widget class="QLabel"><property name="text"><string>8</string></property></widget></item>
+     <item row="7" column="1"><widget class="QLineEdit" name="kcfg_windowClass8"></widget></item>
+     <item row="7" column="2"><widget class="QLineEdit" name="kcfg_shortcut8"></widget></item>
+     <item row="7" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent8">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="7" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent8">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 9 -->
+     <item row="8" column="0"><widget class="QLabel"><property name="text"><string>9</string></property></widget></item>
+     <item row="8" column="1"><widget class="QLineEdit" name="kcfg_windowClass9"></widget></item>
+     <item row="8" column="2"><widget class="QLineEdit" name="kcfg_shortcut9"></widget></item>
+     <item row="8" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent9">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="8" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent9">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+     <!-- Slot 10 -->
+     <item row="9" column="0"><widget class="QLabel"><property name="text"><string>10</string></property></widget></item>
+     <item row="9" column="1"><widget class="QLineEdit" name="kcfg_windowClass10"></widget></item>
+     <item row="9" column="2"><widget class="QLineEdit" name="kcfg_shortcut10"></widget></item>
+     <item row="9" column="3">
+      <widget class="QSpinBox" name="kcfg_widthPercent10">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>100</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+     <item row="9" column="4">
+      <widget class="QSpinBox" name="kcfg_heightPercent10">
+       <property name="minimum"><number>10</number></property><property name="maximum"><number>100</number></property>
+       <property name="singleStep"><number>5</number></property><property name="value"><number>50</number></property>
+       <property name="suffix"><string> %</string></property>
+      </widget>
+     </item>
+
+    </layout>
+   </item>
+
+   <!-- Hint -->
+   <item>
+    <widget class="QLabel" name="labelHint">
+     <property name="text"><string>After saving, reload the script (disable → enable) for changes to take effect.
+Shortcut format: F12 · Meta+F1 · Ctrl+F12
+To discover window classes: press Meta+Shift+W (with script active) — an OSD will show "class → App title" for every open window.</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
+    </widget>
+   </item>
+
+   <!-- Vertical spacer -->
+   <item>
+    <spacer>
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <property name="sizeHint" stdset="0"><size><width>0</width><height>10</height></size></property>
+    </spacer>
+   </item>
+
+  </layout>
+ </widget>
+</ui>

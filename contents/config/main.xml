@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name="kwinrc"/>
+  <group name="Script-plasma-dropdown-any">
+
+    <entry name="windowClass1"   type="String"><default></default></entry>
+    <entry name="shortcut1"      type="String"><default></default></entry>
+    <entry name="widthPercent1"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent1" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass2"   type="String"><default></default></entry>
+    <entry name="shortcut2"      type="String"><default></default></entry>
+    <entry name="widthPercent2"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent2" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass3"   type="String"><default></default></entry>
+    <entry name="shortcut3"      type="String"><default></default></entry>
+    <entry name="widthPercent3"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent3" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass4"   type="String"><default></default></entry>
+    <entry name="shortcut4"      type="String"><default></default></entry>
+    <entry name="widthPercent4"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent4" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass5"   type="String"><default></default></entry>
+    <entry name="shortcut5"      type="String"><default></default></entry>
+    <entry name="widthPercent5"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent5" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass6"   type="String"><default></default></entry>
+    <entry name="shortcut6"      type="String"><default></default></entry>
+    <entry name="widthPercent6"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent6" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass7"   type="String"><default></default></entry>
+    <entry name="shortcut7"      type="String"><default></default></entry>
+    <entry name="widthPercent7"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent7" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass8"   type="String"><default></default></entry>
+    <entry name="shortcut8"      type="String"><default></default></entry>
+    <entry name="widthPercent8"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent8" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass9"   type="String"><default></default></entry>
+    <entry name="shortcut9"      type="String"><default></default></entry>
+    <entry name="widthPercent9"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent9" type="Int"><default>50</default></entry>
+
+    <entry name="windowClass10"   type="String"><default></default></entry>
+    <entry name="shortcut10"      type="String"><default></default></entry>
+    <entry name="widthPercent10"  type="Int"><default>100</default></entry>
+    <entry name="heightPercent10" type="Int"><default>50</default></entry>
+
+  </group>
+</kcfg>

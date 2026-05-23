@@ -1,0 +1,7 @@
+# Hashes of file build rules.
+8c4ba17a77f8247a969a551804a563cf CMakeFiles/fetch-translations
+6fed44e1d21273e5a7df9a6e54dc9192 CMakeFiles/kcm_dropdown_any_autogen
+be7635405b82ea7756a40e6e2fbdab7e CMakeFiles/uninstall
+4a47ac135063682b8feceda0aa26dc2d kcm_dropdown_any_autogen/timestamp
+3aa0be6710e8e2d55ad4f39763498ce9 qrc_kcm_resources.cpp
+bc6152d90adcbb67a59746bf5c3386dc releaseme

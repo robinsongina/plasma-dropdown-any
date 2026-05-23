@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "rgn159@gmail.com",
+                "Name": "rgiraldo"
+            }
+        ],
+        "Description": "Toggle any window into a Yakuake-style dropdown panel by its window class. Configure window classes and shortcuts via System Settings → KWin Scripts.",
+        "Id": "plasma-dropdown-any",
+        "License": "GPL-2.0-or-later",
+        "Name": "Dropdown Any Window",
+        "Version": "1.0.0",
+        "Website": ""
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "code/main.js",
+    "X-KDE-ConfigModule": "kwin/effects/configs/kcm_dropdown_any",
+    "KPackageStructure": "KWin/Script"
+}
