@@ -8,9 +8,8 @@ include(KDEInstallDirs6)
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Quick DBus)
 find_package(KF6 REQUIRED COMPONENTS KCMUtils Config CoreAddons)
-find_package(KWayland REQUIRED)
 
 qt_add_resources(QML_RESOURCES kcm_resources.qrc)
 
@@ -22,8 +21,8 @@ kcoreaddons_add_plugin(kcm_dropdown_any
 target_link_libraries(kcm_dropdown_any
     Qt6::Core
     Qt6::Quick
+    Qt6::DBus
     KF6::KCMUtils
     KF6::ConfigCore
     KF6::CoreAddons
-    Plasma::KWaylandClient
 )

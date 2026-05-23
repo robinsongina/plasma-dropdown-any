@@ -4,6 +4,7 @@ import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
+import org.kde.kquickcontrols as KQuickControls
 
 KCM.SimpleKCM {
     id: root
@@ -154,7 +155,7 @@ KCM.SimpleKCM {
 
                     Controls.Label { text: "#"; font.bold: true; Layout.preferredWidth: 20 }
                     Controls.Label { text: qsTr("Window class"); font.bold: true; Layout.fillWidth: true }
-                    Controls.Label { text: qsTr("Shortcut");     font.bold: true; Layout.preferredWidth: 110 }
+                    Controls.Label { text: qsTr("Shortcut");     font.bold: true; Layout.preferredWidth: 140 }
                     Controls.Label { text: qsTr("Width %");  font.bold: true; Layout.preferredWidth: 75 }
                     Controls.Label { text: qsTr("Height %"); font.bold: true; Layout.preferredWidth: 75 }
                     Item { Layout.preferredWidth: 30 }
@@ -185,12 +186,12 @@ KCM.SimpleKCM {
                                 }
                             }
 
-                            Controls.TextField {
-                                Layout.preferredWidth: 110
-                                text: model.shortcut
-                                placeholderText: index === 0 ? "e.g. F12" : (index === 1 ? "e.g. Meta+F1" : "")
-                                onEditingFinished: {
-                                    slotModel.set(index, { shortcut: text })
+                            KQuickControls.KeySequenceItem {
+                                Layout.preferredWidth: 140
+                                keySequence: model.shortcut
+                                checkForConflictsAgainst: 0
+                                onKeySequenceModified: {
+                                    slotModel.set(index, { shortcut: keySequence.toString() })
                                     pushSlot(index)
                                 }
                             }

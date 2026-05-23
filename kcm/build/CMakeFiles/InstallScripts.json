@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/rgiraldo/projects_plasma/app-quake/kcm/build/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

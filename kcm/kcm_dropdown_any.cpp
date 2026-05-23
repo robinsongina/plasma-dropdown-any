@@ -4,10 +4,11 @@
 #include <KSharedConfig>
 #include <KConfigGroup>
 
-#include <KWayland/Client/connection_thread.h>
-#include <KWayland/Client/registry.h>
-#include <KWayland/Client/plasmawindowmanagement.h>
-
+#include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusReply>
+#include <QFile>
+#include <QProcess>
 #include <QSet>
 #include <QTimer>
 #include <QVariantMap>
@@ -18,8 +19,10 @@ DropdownAnyKCM::DropdownAnyKCM(QObject *parent, const KPluginMetaData &data)
     for (int i = 0; i < 10; i++) {
         m_slots.append({QString(), QString(), 100, 50});
     }
-    initWaylandWindowList();
     load();
+
+    // Fetch active windows after the event loop starts
+    QTimer::singleShot(300, this, &DropdownAnyKCM::fetchActiveWindows);
 }
 
 QStringList DropdownAnyKCM::activeWindows() const
@@ -78,6 +81,14 @@ void DropdownAnyKCM::save()
     }
     cfg.sync();
     setNeedsSave(false);
+
+    // Reload the KWin script so new shortcuts get registered immediately
+    QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
+                             QStringLiteral("/Scripting"),
+                             QStringLiteral("org.kde.kwin.Scripting"),
+                             QDBusConnection::sessionBus());
+    scripting.call(QStringLiteral("unloadScript"), QStringLiteral("plasma-dropdown-any"));
+    scripting.call(QStringLiteral("start"));
 }
 
 void DropdownAnyKCM::defaults()
@@ -87,42 +98,68 @@ void DropdownAnyKCM::defaults()
     setNeedsSave(true);
 }
 
-void DropdownAnyKCM::initWaylandWindowList()
+void DropdownAnyKCM::fetchActiveWindows()
 {
-    auto *conn = KWayland::Client::ConnectionThread::fromApplication(this);
-    if (!conn) return;
+    // Write a temp KWin script that logs window classes via print()
+    const QString tmpPath = QStringLiteral("/tmp/kcm_dropdown_list.js");
+    QFile f(tmpPath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
+    f.write(
+        "workspace.windowList().forEach(function(w) {\n"
+        "    if (w.resourceClass)\n"
+        "        print('KCMWIN:' + w.resourceClass + '|' + (w.caption || ''));\n"
+        "});\n"
+    );
+    f.close();
 
-    auto *reg = new KWayland::Client::Registry(this);
-    reg->create(conn);
+    QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
+                             QStringLiteral("/Scripting"),
+                             QStringLiteral("org.kde.kwin.Scripting"),
+                             QDBusConnection::sessionBus());
+    QDBusReply<int> reply = scripting.call(QStringLiteral("loadScript"),
+                                           tmpPath,
+                                           QStringLiteral("kcm_list_temp"));
+    if (!reply.isValid() || reply.value() < 0) return;
 
-    connect(reg, &KWayland::Client::Registry::plasmaWindowManagementAnnounced,
-            this, [this, reg](quint32 name, quint32 version) {
-        auto *pwm = reg->createPlasmaWindowManagement(name, version, this);
-        connect(pwm, &KWayland::Client::PlasmaWindowManagement::windowCreated,
-                this, [this, pwm]() { refreshWindows(pwm); });
-        QTimer::singleShot(400, this, [this, pwm]() { refreshWindows(pwm); });
+    const QString scriptPath = QStringLiteral("/Scripting/Script%1").arg(reply.value());
+    QDBusInterface script(QStringLiteral("org.kde.KWin"), scriptPath,
+                          QStringLiteral("org.kde.kwin.Script"),
+                          QDBusConnection::sessionBus());
+    script.call(QStringLiteral("run"));
+
+    // Parse journalctl after a short delay
+    QTimer::singleShot(600, this, [this, tmpPath]() {
+        QProcess proc;
+        proc.start(QStringLiteral("journalctl"),
+                   {QStringLiteral("-t"), QStringLiteral("kwin_wayland"),
+                    QStringLiteral("-n"), QStringLiteral("300"),
+                    QStringLiteral("--no-pager"),
+                    QStringLiteral("--since"), QStringLiteral("5 seconds ago")});
+        proc.waitForFinished(3000);
+
+        const QString output = QString::fromLocal8Bit(proc.readAllStandardOutput());
+        QStringList windows;
+        QSet<QString> seen;
+
+        for (const QString &line : output.split(QLatin1Char('\n'))) {
+            const int idx = line.indexOf(QStringLiteral("KCMWIN:"));
+            if (idx < 0) continue;
+            const QString data = line.mid(idx + 7);
+            const int sep = data.indexOf(QLatin1Char('|'));
+            const QString cls   = sep >= 0 ? data.left(sep).trimmed()       : data.trimmed();
+            const QString title = sep >= 0 ? data.mid(sep + 1).left(60)     : QString();
+            if (cls.isEmpty() || seen.contains(cls)) continue;
+            seen.insert(cls);
+            windows << cls + QStringLiteral(" → ") + title;
+        }
+        windows.sort();
+        QFile::remove(tmpPath);
+
+        if (m_activeWindows != windows) {
+            m_activeWindows = windows;
+            Q_EMIT activeWindowsChanged();
+        }
     });
-
-    reg->setup();
-    conn->roundtrip();
-}
-
-void DropdownAnyKCM::refreshWindows(KWayland::Client::PlasmaWindowManagement *pwm)
-{
-    QStringList windows;
-    QSet<QString> seen;
-    for (auto *w : pwm->windows()) {
-        const QString id = w->appId();
-        if (id.isEmpty() || seen.contains(id)) continue;
-        seen.insert(id);
-        const QString title = w->title().left(60);
-        windows << id + QStringLiteral(" → ") + title;
-    }
-    windows.sort();
-    if (m_activeWindows != windows) {
-        m_activeWindows = windows;
-        Q_EMIT activeWindowsChanged();
-    }
 }
 
 K_PLUGIN_CLASS_WITH_JSON(DropdownAnyKCM, "kcm_dropdown_any.json")

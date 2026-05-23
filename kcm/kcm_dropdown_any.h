@@ -8,10 +8,6 @@
 #include <QStringList>
 #include <QVariantList>
 
-namespace KWayland::Client {
-class PlasmaWindowManagement;
-}
-
 class DropdownAnyKCM : public KQuickConfigModule
 {
     Q_OBJECT
@@ -49,6 +45,5 @@ private:
     QList<SlotData> m_slots;
     QStringList     m_activeWindows;
 
-    void initWaylandWindowList();
-    void refreshWindows(KWayland::Client::PlasmaWindowManagement *pwm);
+    void fetchActiveWindows();
 };

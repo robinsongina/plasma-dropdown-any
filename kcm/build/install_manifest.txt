@@ -1,1 +1,0 @@
-/home/rgiraldo/.local/lib/plugins/kwin/effects/configs/kcm_dropdown_any.so
