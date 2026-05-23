@@ -7,6 +7,7 @@
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
+#include <QDateTime>
 #include <QFile>
 #include <QProcess>
 #include <QSet>
@@ -21,7 +22,6 @@ DropdownAnyKCM::DropdownAnyKCM(QObject *parent, const KPluginMetaData &data)
     }
     load();
 
-    // Fetch active windows after the event loop starts
     QTimer::singleShot(300, this, &DropdownAnyKCM::fetchActiveWindows);
 }
 
@@ -70,6 +70,31 @@ void DropdownAnyKCM::load()
 
 void DropdownAnyKCM::save()
 {
+    // Read old config to know which shortcut entries to clean up from kglobalshortcutsrc
+    const auto oldCfg = KSharedConfig::openConfig(QStringLiteral("kwinrc"))
+                            ->group(QStringLiteral("Script-plasma-dropdown-any"));
+
+    auto globalCfg  = KSharedConfig::openConfig(QStringLiteral("kglobalshortcutsrc"),
+                                                 KConfig::NoGlobals);
+    auto kwinGroup   = globalCfg->group(QStringLiteral("kwin"));
+
+    for (int i = 0; i < 10; i++) {
+        const QString n        = QString::number(i + 1);
+        const QString oldClass = oldCfg.readEntry(QStringLiteral("windowClass") + n, QString());
+        const QString newClass = m_slots[i].windowClass.trimmed();
+
+        // Remove the old kglobalshortcutsrc entry when the class changes or is cleared
+        if (!oldClass.isEmpty() && oldClass != newClass) {
+            kwinGroup.deleteEntry(QStringLiteral("DropdownAny-") + oldClass);
+        }
+        // Also remove if shortcut is being cleared on the same class
+        if (!oldClass.isEmpty() && oldClass == newClass && m_slots[i].shortcut.trimmed().isEmpty()) {
+            kwinGroup.deleteEntry(QStringLiteral("DropdownAny-") + oldClass);
+        }
+    }
+    globalCfg->sync();
+
+    // Write new slot config to kwinrc
     auto cfg = KSharedConfig::openConfig(QStringLiteral("kwinrc"))
                    ->group(QStringLiteral("Script-plasma-dropdown-any"));
     for (int i = 0; i < 10; i++) {
@@ -100,22 +125,30 @@ void DropdownAnyKCM::defaults()
 
 void DropdownAnyKCM::fetchActiveWindows()
 {
-    // Write a temp KWin script that logs window classes via print()
+    // Embed a unique marker per invocation to avoid matching stale journal entries
+    const QString marker = QStringLiteral("KCMWIN_%1")
+                               .arg(QDateTime::currentMSecsSinceEpoch());
+
     const QString tmpPath = QStringLiteral("/tmp/kcm_dropdown_list.js");
     QFile f(tmpPath);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
-    f.write(
+    const QString scriptSrc = QStringLiteral(
         "workspace.windowList().forEach(function(w) {\n"
         "    if (w.resourceClass)\n"
-        "        print('KCMWIN:' + w.resourceClass + '|' + (w.caption || ''));\n"
+        "        print('%1:' + w.resourceClass + '|' + (w.caption || ''));\n"
         "});\n"
-    );
+    ).arg(marker);
+    f.write(scriptSrc.toUtf8());
     f.close();
 
     QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
                              QStringLiteral("/Scripting"),
                              QStringLiteral("org.kde.kwin.Scripting"),
                              QDBusConnection::sessionBus());
+
+    // Unload any leftover from a previous attempt
+    scripting.call(QStringLiteral("unloadScript"), QStringLiteral("kcm_list_temp"));
+
     QDBusReply<int> reply = scripting.call(QStringLiteral("loadScript"),
                                            tmpPath,
                                            QStringLiteral("kcm_list_temp"));
@@ -127,24 +160,25 @@ void DropdownAnyKCM::fetchActiveWindows()
                           QDBusConnection::sessionBus());
     script.call(QStringLiteral("run"));
 
-    // Parse journalctl after a short delay
-    QTimer::singleShot(600, this, [this, tmpPath]() {
+    // Parse journalctl after script has had time to execute.
+    // No --since filter: it's unreliable on some systems; use unique marker instead.
+    QTimer::singleShot(800, this, [this, tmpPath, marker]() {
         QProcess proc;
         proc.start(QStringLiteral("journalctl"),
                    {QStringLiteral("-t"), QStringLiteral("kwin_wayland"),
-                    QStringLiteral("-n"), QStringLiteral("300"),
-                    QStringLiteral("--no-pager"),
-                    QStringLiteral("--since"), QStringLiteral("5 seconds ago")});
+                    QStringLiteral("-n"), QStringLiteral("500"),
+                    QStringLiteral("--no-pager")});
         proc.waitForFinished(3000);
 
         const QString output = QString::fromLocal8Bit(proc.readAllStandardOutput());
+        const QString prefix = marker + QLatin1Char(':');
         QStringList windows;
         QSet<QString> seen;
 
         for (const QString &line : output.split(QLatin1Char('\n'))) {
-            const int idx = line.indexOf(QStringLiteral("KCMWIN:"));
+            const int idx = line.indexOf(prefix);
             if (idx < 0) continue;
-            const QString data = line.mid(idx + 7);
+            const QString data = line.mid(idx + prefix.size());
             const int sep = data.indexOf(QLatin1Char('|'));
             const QString cls   = sep >= 0 ? data.left(sep).trimmed()       : data.trimmed();
             const QString title = sep >= 0 ? data.mid(sep + 1).left(60)     : QString();
