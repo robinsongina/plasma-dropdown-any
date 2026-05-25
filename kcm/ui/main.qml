@@ -12,10 +12,22 @@ KCM.SimpleKCM {
     Connections {
         target: kcm
         function onSlotsChanged() { syncSlots() }
+        function onActiveWindowsChanged() {
+            console.log("[DropdownAny] activeWindows updated: " + kcm.activeWindows.length + " entries")
+            windowClassModel.clear()
+            for (var i = 0; i < kcm.activeWindows.length; i++) {
+                var parts = kcm.activeWindows[i].split(" → ")
+                var cls   = parts[0].trim()
+                var title = parts.length > 1 ? parts.slice(1).join(" → ") : ""
+                console.log("[DropdownAny]   [" + i + "] cls=" + cls + (title ? " title=" + title : ""))
+                windowClassModel.append({ cls: cls, title: title })
+            }
+        }
     }
     Component.onCompleted: syncSlots()
 
     ListModel { id: slotModel }
+    ListModel { id: windowClassModel }
 
     function syncSlots() {
         slotModel.clear()
@@ -42,10 +54,20 @@ KCM.SimpleKCM {
         Kirigami.Card {
             Layout.fillWidth: true
 
-            header: Kirigami.Heading {
-                level: 3
-                padding: Kirigami.Units.smallSpacing
-                text: qsTr("Active windows — click a row to add its class to the first empty slot")
+            header: RowLayout {
+                Kirigami.Heading {
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
+                    text: qsTr("Active windows")
+                    Layout.fillWidth: true
+                }
+                Controls.ToolButton {
+                    icon.name: "view-refresh"
+                    Controls.ToolTip.text: qsTr("Refresh window list")
+                    Controls.ToolTip.visible: hovered
+                    Controls.ToolTip.delay: 500
+                    onClicked: kcm.fetchActiveWindows()
+                }
             }
 
             contentItem: ColumnLayout {
@@ -106,11 +128,12 @@ KCM.SimpleKCM {
                             Controls.ToolTip.delay: 500
                             Controls.ToolTip.text: {
                                 const cls = modelData.split(" → ")[0] || ""
-                                return qsTr("Add \"%1\" to first empty slot").arg(cls)
+                                return qsTr("Add \"%1\" as a new dropdown slot").arg(cls)
                             }
 
                             onClicked: {
                                 const cls = modelData.split(" → ")[0] || ""
+                                // Fill first empty slot, or create a new one
                                 for (let i = 0; i < slotModel.count; i++) {
                                     if (slotModel.get(i).windowClass === "") {
                                         slotModel.set(i, { windowClass: cls })
@@ -118,6 +141,7 @@ KCM.SimpleKCM {
                                         return
                                     }
                                 }
+                                kcm.addSlotWithClass(cls)
                             }
                         }
                         Kirigami.Separator { width: parent.width }
@@ -167,6 +191,9 @@ KCM.SimpleKCM {
                     delegate: Column {
                         id: slotRow
                         property int slotIdx: index
+                        property string savedClass: ""
+                        Component.onCompleted: savedClass = windowClass
+
                         width: parent.width
 
                         RowLayout {
@@ -182,16 +209,20 @@ KCM.SimpleKCM {
                                 id: classCombo
                                 Layout.fillWidth: true
                                 editable: true
+                                model: windowClassModel
+                                textRole: "cls"
 
-                                // Rebuild class-name list whenever the active window list changes
-                                model: {
-                                    var classes = []
-                                    for (var i = 0; i < kcm.activeWindows.length; i++)
-                                        classes.push(kcm.activeWindows[i].split(" → ")[0].trim())
-                                    return classes
+                                // Set editText imperatively — NOT as a binding.
+                                // Qt's internal updateEditText() breaks QML bindings on model
+                                // change; we restore from savedClass instead.
+                                Component.onCompleted: editText = slotRow.savedClass
+
+                                Connections {
+                                    target: windowClassModel
+                                    function onCountChanged() {
+                                        classCombo.editText = slotRow.savedClass
+                                    }
                                 }
-
-                                editText: windowClass  // role from slotModel
 
                                 // Show class (monospace) + app title (dimmed) in the dropdown
                                 delegate: Controls.ItemDelegate {
@@ -201,20 +232,16 @@ KCM.SimpleKCM {
                                     contentItem: ColumnLayout {
                                         spacing: 1
                                         Controls.Label {
-                                            text: modelData
+                                            text: model.cls
                                             font.family: "monospace"
                                             Layout.fillWidth: true
                                             elide: Text.ElideRight
                                         }
                                         Controls.Label {
-                                            text: {
-                                                var full = kcm.activeWindows[index] || ""
-                                                var sep = full.indexOf(" → ")
-                                                return sep >= 0 ? full.substring(sep + 3) : ""
-                                            }
+                                            text: model.title
                                             color: Kirigami.Theme.disabledTextColor
                                             Layout.fillWidth: true
-                                            visible: text !== ""
+                                            visible: model.title !== ""
                                             elide: Text.ElideRight
                                         }
                                     }
@@ -222,16 +249,18 @@ KCM.SimpleKCM {
 
                                 // User picks from the dropdown
                                 onActivated: function(comboIdx) {
-                                    var cls = classCombo.model[comboIdx] || ""
-                                    classCombo.editText = cls
+                                    var cls = windowClassModel.get(comboIdx).cls
+                                    slotRow.savedClass = cls
+                                    editText = cls
                                     slotModel.set(slotRow.slotIdx, { windowClass: cls })
                                     pushSlot(slotRow.slotIdx)
                                 }
 
                                 // User types manually → push when focus leaves
                                 onActiveFocusChanged: {
-                                    if (!classCombo.activeFocus) {
-                                        slotModel.set(slotRow.slotIdx, { windowClass: classCombo.editText })
+                                    if (!activeFocus) {
+                                        slotRow.savedClass = editText
+                                        slotModel.set(slotRow.slotIdx, { windowClass: editText })
                                         pushSlot(slotRow.slotIdx)
                                     }
                                 }
@@ -271,22 +300,34 @@ KCM.SimpleKCM {
 
                             Controls.ToolButton {
                                 Layout.preferredWidth: 30
-                                icon.name: "edit-clear"
-                                visible: model.windowClass !== "" || model.shortcut !== ""
-                                Controls.ToolTip.text: qsTr("Clear this slot")
+                                icon.name: "list-remove"
+                                Controls.ToolTip.text: qsTr("Remove this slot")
                                 Controls.ToolTip.visible: hovered
                                 Controls.ToolTip.delay: 500
-                                onClicked: {
-                                    slotModel.set(index, {
-                                        windowClass: "", shortcut: "",
-                                        widthPercent: 100, heightPercent: 50
-                                    })
-                                    pushSlot(index)
-                                }
+                                onClicked: kcm.removeSlot(slotRow.slotIdx)
                             }
                         }
                         Kirigami.Separator { width: parent.width }
                     }
+                }
+
+                Controls.Label {
+                    visible: slotModel.count === 0
+                    Layout.fillWidth: true
+                    text: qsTr("No slots configured yet — click an active window above or use the Add button below.")
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Kirigami.Theme.disabledTextColor
+                    padding: Kirigami.Units.largeSpacing
+                    wrapMode: Text.WordWrap
+                }
+
+                Controls.Button {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    icon.name: "list-add"
+                    text: qsTr("Add slot")
+                    onClicked: kcm.addSlot()
                 }
             }
         }

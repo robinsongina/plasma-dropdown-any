@@ -29,6 +29,10 @@ public:
                              const QString &shortcut,
                              int widthPct,
                              int heightPct);
+    Q_INVOKABLE void addSlot();
+    Q_INVOKABLE void addSlotWithClass(const QString &windowClass);
+    Q_INVOKABLE void removeSlot(int idx);
+    Q_INVOKABLE void fetchActiveWindows();
     void setDebugMode(bool enabled);
 
     void load()     override;
@@ -56,6 +60,5 @@ private:
     WindowSink     *m_winSink = nullptr;
     bool            m_debugMode = false;
 
-    void    fetchActiveWindows();
     QString resolveMainJsPath() const;
 };

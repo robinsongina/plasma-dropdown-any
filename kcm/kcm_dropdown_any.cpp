@@ -31,9 +31,6 @@ public Q_SLOTS:
 DropdownAnyKCM::DropdownAnyKCM(QObject *parent, const KPluginMetaData &data)
     : KQuickConfigModule(parent, data)
 {
-    for (int i = 0; i < 10; i++) {
-        m_slots.append({QString(), QString(), 100, 50});
-    }
     load();
 
     QTimer::singleShot(300, this, &DropdownAnyKCM::fetchActiveWindows);
@@ -75,7 +72,40 @@ void DropdownAnyKCM::setSlot(int idx, const QString &windowClass, const QString 
                               int widthPct, int heightPct)
 {
     if (idx < 0 || idx >= m_slots.size()) return;
+    qDebug() << "[DropdownAny] KCM setSlot" << idx + 1
+             << "| class:" << (windowClass.isEmpty() ? QStringLiteral("(empty)") : windowClass)
+             << "| shortcut:" << (shortcut.isEmpty() ? QStringLiteral("(none)") : shortcut)
+             << "| size:" << widthPct << "x" << heightPct;
     m_slots[idx] = {windowClass, shortcut, widthPct, heightPct};
+    setNeedsSave(true);
+    Q_EMIT slotsChanged();
+}
+
+void DropdownAnyKCM::addSlot()
+{
+    m_slots.append({QString(), QString(), 100, 50});
+    qDebug() << "[DropdownAny] KCM addSlot → total slots:" << m_slots.size();
+    setNeedsSave(true);
+    Q_EMIT slotsChanged();
+}
+
+void DropdownAnyKCM::addSlotWithClass(const QString &windowClass)
+{
+    m_slots.append({windowClass.trimmed(), QString(), 100, 50});
+    qDebug() << "[DropdownAny] KCM addSlot with class:" << windowClass
+             << "→ total slots:" << m_slots.size();
+    setNeedsSave(true);
+    Q_EMIT slotsChanged();
+}
+
+void DropdownAnyKCM::removeSlot(int idx)
+{
+    if (idx < 0 || idx >= m_slots.size()) return;
+    qDebug() << "[DropdownAny] KCM removeSlot" << idx + 1
+             << "| class:" << (m_slots[idx].windowClass.isEmpty()
+                               ? QStringLiteral("(empty)") : m_slots[idx].windowClass)
+             << "→ remaining:" << m_slots.size() - 1;
+    m_slots.removeAt(idx);
     setNeedsSave(true);
     Q_EMIT slotsChanged();
 }
@@ -84,13 +114,36 @@ void DropdownAnyKCM::load()
 {
     const auto cfg = KSharedConfig::openConfig(QStringLiteral("kwinrc"))
                          ->group(QStringLiteral("Script-plasma-dropdown-any"));
-    for (int i = 0; i < 10; i++) {
-        const QString n = QString::number(i + 1);
-        m_slots[i].windowClass   = cfg.readEntry(QStringLiteral("windowClass")   + n, QString());
-        m_slots[i].shortcut      = cfg.readEntry(QStringLiteral("shortcut")      + n, QString());
-        m_slots[i].widthPercent  = cfg.readEntry(QStringLiteral("widthPercent")  + n, 100);
-        m_slots[i].heightPercent = cfg.readEntry(QStringLiteral("heightPercent") + n, 50);
+
+    m_slots.clear();
+    const int storedCount = cfg.readEntry(QStringLiteral("slotCount"), -1);
+
+    if (storedCount >= 0) {
+        // New format: read exactly storedCount slots
+        for (int i = 0; i < storedCount; i++) {
+            const QString n = QString::number(i + 1);
+            m_slots.append({
+                cfg.readEntry(QStringLiteral("windowClass")   + n, QString()),
+                cfg.readEntry(QStringLiteral("shortcut")      + n, QString()),
+                cfg.readEntry(QStringLiteral("widthPercent")  + n, 100),
+                cfg.readEntry(QStringLiteral("heightPercent") + n, 50)
+            });
+        }
+    } else {
+        // Old format (no slotCount): scan up to 10, skip blank entries
+        for (int i = 0; i < 10; i++) {
+            const QString n   = QString::number(i + 1);
+            const QString cls = cfg.readEntry(QStringLiteral("windowClass") + n, QString());
+            const QString sc  = cfg.readEntry(QStringLiteral("shortcut")    + n, QString());
+            if (cls.isEmpty() && sc.isEmpty()) continue;
+            m_slots.append({
+                cls, sc,
+                cfg.readEntry(QStringLiteral("widthPercent")  + n, 100),
+                cfg.readEntry(QStringLiteral("heightPercent") + n, 50)
+            });
+        }
     }
+
     m_debugMode = cfg.readEntry(QStringLiteral("debugMode"), false);
     Q_EMIT slotsChanged();
     Q_EMIT debugModeChanged();
@@ -107,42 +160,44 @@ void DropdownAnyKCM::save()
                                                  KConfig::NoGlobals);
     auto kwinGroup   = globalCfg->group(QStringLiteral("kwin"));
 
-    for (int i = 0; i < 10; i++) {
-        const QString n        = QString::number(i + 1);
-        const QString oldClass = oldCfg.readEntry(QStringLiteral("windowClass") + n, QString());
-        const QString newClass = m_slots[i].windowClass.trimmed();
-
-        // Remove the old kglobalshortcutsrc entry when the class changes or is cleared
-        if (!oldClass.isEmpty() && oldClass != newClass) {
+    // Delete ALL old DropdownAny-* entries from kglobalshortcutsrc, then rewrite
+    const int oldCount = oldCfg.readEntry(QStringLiteral("slotCount"), 10);
+    for (int i = 0; i < oldCount; i++) {
+        const QString oldClass = oldCfg.readEntry(
+            QStringLiteral("windowClass") + QString::number(i + 1), QString());
+        if (!oldClass.isEmpty())
             kwinGroup.deleteEntry(QStringLiteral("DropdownAny-") + oldClass);
-        }
-        // Also remove if shortcut is being cleared on the same class
-        if (!oldClass.isEmpty() && oldClass == newClass && m_slots[i].shortcut.trimmed().isEmpty()) {
-            kwinGroup.deleteEntry(QStringLiteral("DropdownAny-") + oldClass);
-        }
     }
 
-    // Write new shortcut entries for all non-empty slots
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < m_slots.size(); i++) {
         const QString cls      = m_slots[i].windowClass.trimmed();
         const QString shortcut = m_slots[i].shortcut.trimmed();
         if (cls.isEmpty() || shortcut.isEmpty()) continue;
-        const QString key   = QStringLiteral("DropdownAny-") + cls;
-        const QString value = shortcut + QStringLiteral(",none,Dropdown toggle: ") + cls;
-        kwinGroup.writeEntry(key, value);
+        kwinGroup.writeEntry(QStringLiteral("DropdownAny-%1").arg(cls),
+                             QStringLiteral("%1,none,Dropdown toggle: %2").arg(shortcut, cls));
     }
 
     globalCfg->sync();
 
-    // Write new slot config to kwinrc
+    // Write kwinrc
     auto cfg = KSharedConfig::openConfig(QStringLiteral("kwinrc"))
                    ->group(QStringLiteral("Script-plasma-dropdown-any"));
-    for (int i = 0; i < 10; i++) {
+
+    cfg.writeEntry(QStringLiteral("slotCount"), (int)m_slots.size());
+    for (int i = 0; i < m_slots.size(); i++) {
         const QString n = QString::number(i + 1);
         cfg.writeEntry(QStringLiteral("windowClass")   + n, m_slots[i].windowClass);
         cfg.writeEntry(QStringLiteral("shortcut")      + n, m_slots[i].shortcut);
         cfg.writeEntry(QStringLiteral("widthPercent")  + n, m_slots[i].widthPercent);
         cfg.writeEntry(QStringLiteral("heightPercent") + n, m_slots[i].heightPercent);
+    }
+    // Remove stale entries beyond current count
+    for (int i = m_slots.size(); i < 20; i++) {
+        const QString n = QString::number(i + 1);
+        cfg.deleteEntry(QStringLiteral("windowClass")   + n);
+        cfg.deleteEntry(QStringLiteral("shortcut")      + n);
+        cfg.deleteEntry(QStringLiteral("widthPercent")  + n);
+        cfg.deleteEntry(QStringLiteral("heightPercent") + n);
     }
     cfg.writeEntry(QStringLiteral("debugMode"), m_debugMode);
     cfg.sync();
@@ -178,7 +233,7 @@ void DropdownAnyKCM::save()
 
 void DropdownAnyKCM::defaults()
 {
-    for (auto &s : m_slots) s = {QString(), QString(), 100, 50};
+    m_slots.clear();
     m_debugMode = false;
     Q_EMIT slotsChanged();
     Q_EMIT debugModeChanged();
@@ -188,7 +243,7 @@ void DropdownAnyKCM::defaults()
 void DropdownAnyKCM::fetchActiveWindows()
 {
     auto bus = QDBusConnection::sessionBus();
-    const QString service = QStringLiteral("local.DropdownAnyKCM.WinList.%1")
+    const QString service = QStringLiteral("local.DropdownAnyKCM.WinList.p%1")
                                 .arg(QCoreApplication::applicationPid());
 
     // Clean up any previous sink
@@ -255,6 +310,9 @@ void DropdownAnyKCM::fetchActiveWindows()
         return;
     }
 
+    qDebug() << "[DropdownAny] KCM fetchActiveWindows: script loaded, id =" << reply.value()
+             << "| service =" << service;
+
     QDBusInterface script(QStringLiteral("org.kde.KWin"),
                           QStringLiteral("/Scripting/Script%1").arg(reply.value()),
                           QStringLiteral("org.kde.kwin.Script"),
@@ -267,7 +325,7 @@ void DropdownAnyKCM::fetchActiveWindows()
 void DropdownAnyKCM::finalizeWindowCollection()
 {
     auto bus = QDBusConnection::sessionBus();
-    const QString service = QStringLiteral("local.DropdownAnyKCM.WinList.%1")
+    const QString service = QStringLiteral("local.DropdownAnyKCM.WinList.p%1")
                                 .arg(QCoreApplication::applicationPid());
 
     QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
@@ -297,9 +355,16 @@ void DropdownAnyKCM::finalizeWindowCollection()
         m_winSink = nullptr;
     }
 
+    qDebug() << "[DropdownAny] KCM finalizeWindowCollection: buffer size ="
+             << (m_winSink ? m_winSink->buffer.size() : -1)
+             << "| unique windows =" << windows.size()
+             << "| list:" << windows;
+
     if (m_activeWindows != windows) {
         m_activeWindows = windows;
         Q_EMIT activeWindowsChanged();
+    } else {
+        qDebug() << "[DropdownAny] KCM: activeWindows unchanged, signal NOT emitted";
     }
 }
 
