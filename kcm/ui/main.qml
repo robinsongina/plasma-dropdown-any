@@ -269,7 +269,7 @@ KCM.SimpleKCM {
                             KQuickControls.KeySequenceItem {
                                 Layout.preferredWidth: 140
                                 keySequence: model.shortcut
-                                checkForConflictsAgainst: 0
+                                checkForConflictsAgainst: 2  // GlobalShortcuts
                                 onKeySequenceModified: {
                                     slotModel.set(index, { shortcut: keySequence.toString() })
                                     pushSlot(index)
@@ -307,6 +307,22 @@ KCM.SimpleKCM {
                                 onClicked: kcm.removeSlot(slotRow.slotIdx)
                             }
                         }
+
+                        Kirigami.InlineMessage {
+                            width: parent.width
+                            type: Kirigami.MessageType.Warning
+                            text: qsTr("This shortcut is already assigned to another slot in this list.")
+                            visible: {
+                                const sc = model.shortcut
+                                if (!sc) return false
+                                for (let i = 0; i < slotModel.count; i++) {
+                                    if (i === slotRow.slotIdx) continue
+                                    if (slotModel.get(i).shortcut === sc) return true
+                                }
+                                return false
+                            }
+                        }
+
                         Kirigami.Separator { width: parent.width }
                     }
                 }
