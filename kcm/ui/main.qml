@@ -165,6 +165,8 @@ KCM.SimpleKCM {
                 Repeater {
                     model: slotModel
                     delegate: Column {
+                        id: slotRow
+                        property int slotIdx: index
                         width: parent.width
 
                         RowLayout {
@@ -176,13 +178,62 @@ KCM.SimpleKCM {
                                 Layout.preferredWidth: 20
                             }
 
-                            Controls.TextField {
+                            Controls.ComboBox {
+                                id: classCombo
                                 Layout.fillWidth: true
-                                text: model.windowClass
-                                placeholderText: index === 0 ? "e.g. konsole" : (index === 1 ? "e.g. kitty" : "")
-                                onEditingFinished: {
-                                    slotModel.set(index, { windowClass: text })
-                                    pushSlot(index)
+                                editable: true
+
+                                // Rebuild class-name list whenever the active window list changes
+                                model: {
+                                    var classes = []
+                                    for (var i = 0; i < kcm.activeWindows.length; i++)
+                                        classes.push(kcm.activeWindows[i].split(" → ")[0].trim())
+                                    return classes
+                                }
+
+                                editText: windowClass  // role from slotModel
+
+                                // Show class (monospace) + app title (dimmed) in the dropdown
+                                delegate: Controls.ItemDelegate {
+                                    width: classCombo.popup.width
+                                    highlighted: classCombo.highlightedIndex === index
+
+                                    contentItem: ColumnLayout {
+                                        spacing: 1
+                                        Controls.Label {
+                                            text: modelData
+                                            font.family: "monospace"
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
+                                        Controls.Label {
+                                            text: {
+                                                var full = kcm.activeWindows[index] || ""
+                                                var sep = full.indexOf(" → ")
+                                                return sep >= 0 ? full.substring(sep + 3) : ""
+                                            }
+                                            color: Kirigami.Theme.disabledTextColor
+                                            Layout.fillWidth: true
+                                            visible: text !== ""
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
+
+                                // User picks from the dropdown
+                                onActivated: function(comboIdx) {
+                                    var cls = classCombo.model[comboIdx] || ""
+                                    classCombo.editText = cls
+                                    slotModel.set(slotRow.slotIdx, { windowClass: cls })
+                                    pushSlot(slotRow.slotIdx)
+                                }
+
+                                // User types manually → push when focus leaves
+                                onActiveFocusChanged: {
+                                    if (!classCombo.activeFocus) {
+                                        slotModel.set(slotRow.slotIdx, { windowClass: classCombo.editText })
+                                        pushSlot(slotRow.slotIdx)
+                                    }
                                 }
                             }
 
