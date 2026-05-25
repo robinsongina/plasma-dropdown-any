@@ -48,24 +48,46 @@
         win.frameGeometry = area;
     }
 
-    // ── Toggle ────────────────────────────────────────────────────────────────
-    function toggleWindow(windowClass, widthPct, heightPct) {
-        var win = findByClass(windowClass);
-        if (!win) return;
+    // ── Debug ─────────────────────────────────────────────────────────────────
+    var dbgMode = readConfig("debugMode", false);
 
-        if (!win.minimized && win.active) {
-            win.minimized = true;
+    function dbg(msg) {
+        console.log("[DropdownAny] " + msg);
+        if (!dbgMode) return;
+        callDBus(
+            "org.kde.plasmashell",
+            "/org/kde/osdService",
+            "org.kde.osdService",
+            "showText",
+            "utilities-terminal",
+            "[DropdownAny]\n" + msg
+        );
+    }
+
+    // ── Toggle ────────────────────────────────────────────────────────────────
+    function toggleWindow(windowClass, shortcut, widthPct, heightPct) {
+        var win = findByClass(windowClass);
+        if (!win) {
+            dbg(shortcut + " → " + windowClass + "\nWindow not found");
             return;
         }
 
-        win.keepAbove    = true;
-        win.skipTaskbar  = true;
-        win.skipPager    = true;
-        win.skipSwitcher = true;
+        var action;
+        if (!win.minimized && win.active) {
+            win.minimized = true;
+            action = "hidden";
+        } else {
+            win.keepAbove    = true;
+            win.skipTaskbar  = true;
+            win.skipPager    = true;
+            win.skipSwitcher = true;
+            applyDropdownGeometry(win, widthPct, heightPct);
+            win.minimized = false;
+            workspace.activeWindow = win;
+            action = "shown";
+        }
 
-        applyDropdownGeometry(win, widthPct, heightPct);
-        win.minimized = false;
-        workspace.activeWindow = win;
+        dbg(shortcut + " → " + windowClass + " [" + (win.caption || "") + "]\nAction: " + action);
     }
 
     // ── Shortcut registration ─────────────────────────────────────────────────
@@ -82,7 +104,7 @@
                 "DropdownAny-" + windowClass,
                 "Dropdown toggle: " + windowClass,
                 shortcut,
-                function () { toggleWindow(windowClass, widthPct, heightPct); }
+                function () { toggleWindow(windowClass, shortcut, widthPct, heightPct); }
             );
         })(cls, sc, wPct, hPct);
 

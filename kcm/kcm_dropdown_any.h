@@ -15,18 +15,21 @@ class DropdownAnyKCM : public KQuickConfigModule
     Q_OBJECT
     Q_PROPERTY(QStringList activeWindows READ activeWindows NOTIFY activeWindowsChanged)
     Q_PROPERTY(QVariantList slots        READ slots         NOTIFY slotsChanged)
+    Q_PROPERTY(bool debugMode READ debugMode WRITE setDebugMode NOTIFY debugModeChanged)
 
 public:
     DropdownAnyKCM(QObject *parent, const KPluginMetaData &data);
 
     QStringList activeWindows() const;
     QVariantList slots() const;
+    bool debugMode() const;
 
     Q_INVOKABLE void setSlot(int idx,
                              const QString &windowClass,
                              const QString &shortcut,
                              int widthPct,
                              int heightPct);
+    void setDebugMode(bool enabled);
 
     void load()     override;
     void save()     override;
@@ -35,6 +38,7 @@ public:
 Q_SIGNALS:
     void activeWindowsChanged();
     void slotsChanged();
+    void debugModeChanged();
 
 private Q_SLOTS:
     void finalizeWindowCollection();
@@ -50,6 +54,7 @@ private:
     QList<SlotData> m_slots;
     QStringList     m_activeWindows;
     WindowSink     *m_winSink = nullptr;
+    bool            m_debugMode = false;
 
     void    fetchActiveWindows();
     QString resolveMainJsPath() const;

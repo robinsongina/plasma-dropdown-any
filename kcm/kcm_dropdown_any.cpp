@@ -44,6 +44,19 @@ QStringList DropdownAnyKCM::activeWindows() const
     return m_activeWindows;
 }
 
+bool DropdownAnyKCM::debugMode() const
+{
+    return m_debugMode;
+}
+
+void DropdownAnyKCM::setDebugMode(bool enabled)
+{
+    if (m_debugMode == enabled) return;
+    m_debugMode = enabled;
+    setNeedsSave(true);
+    Q_EMIT debugModeChanged();
+}
+
 QVariantList DropdownAnyKCM::slots() const
 {
     QVariantList list;
@@ -78,7 +91,9 @@ void DropdownAnyKCM::load()
         m_slots[i].widthPercent  = cfg.readEntry(QStringLiteral("widthPercent")  + n, 100);
         m_slots[i].heightPercent = cfg.readEntry(QStringLiteral("heightPercent") + n, 50);
     }
+    m_debugMode = cfg.readEntry(QStringLiteral("debugMode"), false);
     Q_EMIT slotsChanged();
+    Q_EMIT debugModeChanged();
     setNeedsSave(false);
 }
 
@@ -129,6 +144,7 @@ void DropdownAnyKCM::save()
         cfg.writeEntry(QStringLiteral("widthPercent")  + n, m_slots[i].widthPercent);
         cfg.writeEntry(QStringLiteral("heightPercent") + n, m_slots[i].heightPercent);
     }
+    cfg.writeEntry(QStringLiteral("debugMode"), m_debugMode);
     cfg.sync();
     setNeedsSave(false);
 
@@ -163,7 +179,9 @@ void DropdownAnyKCM::save()
 void DropdownAnyKCM::defaults()
 {
     for (auto &s : m_slots) s = {QString(), QString(), 100, 50};
+    m_debugMode = false;
     Q_EMIT slotsChanged();
+    Q_EMIT debugModeChanged();
     setNeedsSave(true);
 }
 

@@ -247,5 +247,22 @@ KCM.SimpleKCM {
             color: Kirigami.Theme.disabledTextColor
             text: qsTr("After saving, reload the script (disable → enable in KWin Scripts) for changes to take effect.\nShortcut format: F12 · Meta+F1 · Ctrl+F12")
         }
+
+        // ── Debug ─────────────────────────────────────────────────────────────
+        Kirigami.Card {
+            Layout.fillWidth: true
+
+            header: Kirigami.Heading {
+                level: 3
+                padding: Kirigami.Units.smallSpacing
+                text: qsTr("Developer options")
+            }
+
+            contentItem: Controls.CheckBox {
+                text: qsTr("Enable debug mode — shows an OSD notification on every shortcut trigger with the window class, action taken, and any errors")
+                checked: kcm.debugMode
+                onToggled: kcm.debugMode = checked
+            }
+        }
     }
 }
