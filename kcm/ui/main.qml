@@ -37,14 +37,15 @@ KCM.SimpleKCM {
                 windowClass:   data[i].windowClass  || "",
                 shortcut:      data[i].shortcut     || "",
                 widthPercent:  data[i].widthPercent  !== undefined ? data[i].widthPercent  : 100,
-                heightPercent: data[i].heightPercent !== undefined ? data[i].heightPercent : 50
+                heightPercent: data[i].heightPercent !== undefined ? data[i].heightPercent : 50,
+                screenTarget:  data[i].screenTarget  !== undefined ? data[i].screenTarget  : 0
             })
         }
     }
 
     function pushSlot(idx) {
         const row = slotModel.get(idx)
-        kcm.setSlot(idx, row.windowClass, row.shortcut, row.widthPercent, row.heightPercent)
+        kcm.setSlot(idx, row.windowClass, row.shortcut, row.widthPercent, row.heightPercent, row.screenTarget)
     }
 
     ColumnLayout {
@@ -182,6 +183,7 @@ KCM.SimpleKCM {
                     Controls.Label { text: qsTr("Shortcut");     font.bold: true; Layout.preferredWidth: 140 }
                     Controls.Label { text: qsTr("Width %");  font.bold: true; Layout.preferredWidth: 75 }
                     Controls.Label { text: qsTr("Height %"); font.bold: true; Layout.preferredWidth: 75 }
+                    Controls.Label { text: qsTr("Screen");   font.bold: true; Layout.preferredWidth: 120 }
                     Item { Layout.preferredWidth: 30 }
                 }
                 Kirigami.Separator { Layout.fillWidth: true }
@@ -295,6 +297,16 @@ KCM.SimpleKCM {
                                 onValueModified: {
                                     slotModel.set(index, { heightPercent: value })
                                     pushSlot(index)
+                                }
+                            }
+
+                            Controls.ComboBox {
+                                Layout.preferredWidth: 120
+                                model: kcm.screenNames
+                                currentIndex: slotModel.get(slotRow.slotIdx).screenTarget || 0
+                                onActivated: function(idx) {
+                                    slotModel.set(slotRow.slotIdx, { screenTarget: idx })
+                                    pushSlot(slotRow.slotIdx)
                                 }
                             }
 
