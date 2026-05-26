@@ -123,7 +123,6 @@
         }
 
         // ── Show ──────────────────────────────────────────────────────────────
-        var savedGeom = hiddenWindows[windowClass];
 
         // Always keep the dropdown above other windows and hidden from
         // taskbar/pager/switcher while we reposition it.
@@ -139,18 +138,18 @@
             win.minimized = false;
         }
 
-        if (savedGeom) {
-            // The window is currently parked at y = -height (off-screen).
-            // Setting frameGeometry to the saved on-screen rect triggers the
-            // slide-in animation from the effect — it sees the geometry change
-            // from off-screen → visible and animates it.
-            win.frameGeometry = savedGeom;
+        if (isHidden) {
+            // Window is parked at y = -height (off-screen by our script).
+            // Always recompute geometry for the target screen — restoring the
+            // saved position would put the window on the wrong screen if the
+            // user changed screenTarget since the last hide.
             delete hiddenWindows[windowClass];
-        } else {
-            // First show (or window was minimized by the user): size and position
-            // the window as a dropdown, then animate from wherever it currently is.
-            applyDropdownGeometry(win, widthPct, heightPct, screenTarget);
         }
+
+        // Always position on the configured screen (cursor screen, Screen 1, etc.).
+        // The effect sees the geometry change from off-screen → visible and
+        // animates the slide-in regardless of how we got here.
+        applyDropdownGeometry(win, widthPct, heightPct, screenTarget);
 
         // Restore taskbar/pager/switcher visibility now that the window is on-screen.
         win.skipTaskbar  = false;
