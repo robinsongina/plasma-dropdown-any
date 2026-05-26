@@ -9,6 +9,8 @@
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QFile>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
@@ -33,6 +35,10 @@ DropdownAnyKCM::DropdownAnyKCM(QObject *parent, const KPluginMetaData &data)
 {
     load();
 
+    rebuildScreenNames();
+    connect(qGuiApp, &QGuiApplication::screenAdded,   this, &DropdownAnyKCM::rebuildScreenNames);
+    connect(qGuiApp, &QGuiApplication::screenRemoved, this, &DropdownAnyKCM::rebuildScreenNames);
+
     QTimer::singleShot(300, this, &DropdownAnyKCM::fetchActiveWindows);
 }
 
@@ -54,6 +60,23 @@ void DropdownAnyKCM::setDebugMode(bool enabled)
     Q_EMIT debugModeChanged();
 }
 
+QStringList DropdownAnyKCM::screenNames() const
+{
+    return m_screenNames;
+}
+
+void DropdownAnyKCM::rebuildScreenNames()
+{
+    QStringList names;
+    names << QStringLiteral("At cursor screen");
+    const auto screens = QGuiApplication::screens();
+    for (int i = 0; i < screens.size(); ++i)
+        names << QStringLiteral("Screen %1").arg(i + 1);
+    if (m_screenNames == names) return;
+    m_screenNames = names;
+    Q_EMIT screenNamesChanged();
+}
+
 QVariantList DropdownAnyKCM::slots() const
 {
     QVariantList list;
@@ -63,27 +86,29 @@ QVariantList DropdownAnyKCM::slots() const
         m[QStringLiteral("shortcut")]      = s.shortcut;
         m[QStringLiteral("widthPercent")]  = s.widthPercent;
         m[QStringLiteral("heightPercent")] = s.heightPercent;
+        m[QStringLiteral("screenTarget")]  = s.screenTarget;
         list << m;
     }
     return list;
 }
 
 void DropdownAnyKCM::setSlot(int idx, const QString &windowClass, const QString &shortcut,
-                              int widthPct, int heightPct)
+                              int widthPct, int heightPct, int screenTarget)
 {
     if (idx < 0 || idx >= m_slots.size()) return;
     qDebug() << "[DropdownAny] KCM setSlot" << idx + 1
              << "| class:" << (windowClass.isEmpty() ? QStringLiteral("(empty)") : windowClass)
              << "| shortcut:" << (shortcut.isEmpty() ? QStringLiteral("(none)") : shortcut)
-             << "| size:" << widthPct << "x" << heightPct;
-    m_slots[idx] = {windowClass, shortcut, widthPct, heightPct};
+             << "| size:" << widthPct << "x" << heightPct
+             << "| screen:" << screenTarget;
+    m_slots[idx] = {windowClass, shortcut, widthPct, heightPct, screenTarget};
     setNeedsSave(true);
     Q_EMIT slotsChanged();
 }
 
 void DropdownAnyKCM::addSlot()
 {
-    m_slots.append({QString(), QString(), 100, 50});
+    m_slots.append({QString(), QString(), 100, 50, 0});
     qDebug() << "[DropdownAny] KCM addSlot → total slots:" << m_slots.size();
     setNeedsSave(true);
     Q_EMIT slotsChanged();
@@ -91,7 +116,7 @@ void DropdownAnyKCM::addSlot()
 
 void DropdownAnyKCM::addSlotWithClass(const QString &windowClass)
 {
-    m_slots.append({windowClass.trimmed(), QString(), 100, 50});
+    m_slots.append({windowClass.trimmed(), QString(), 100, 50, 0});
     qDebug() << "[DropdownAny] KCM addSlot with class:" << windowClass
              << "→ total slots:" << m_slots.size();
     setNeedsSave(true);
@@ -126,7 +151,8 @@ void DropdownAnyKCM::load()
                 cfg.readEntry(QStringLiteral("windowClass")   + n, QString()),
                 cfg.readEntry(QStringLiteral("shortcut")      + n, QString()),
                 cfg.readEntry(QStringLiteral("widthPercent")  + n, 100),
-                cfg.readEntry(QStringLiteral("heightPercent") + n, 50)
+                cfg.readEntry(QStringLiteral("heightPercent") + n, 50),
+                cfg.readEntry(QStringLiteral("screenTarget")  + n, 0)
             });
         }
     } else {
@@ -139,7 +165,8 @@ void DropdownAnyKCM::load()
             m_slots.append({
                 cls, sc,
                 cfg.readEntry(QStringLiteral("widthPercent")  + n, 100),
-                cfg.readEntry(QStringLiteral("heightPercent") + n, 50)
+                cfg.readEntry(QStringLiteral("heightPercent") + n, 50),
+                cfg.readEntry(QStringLiteral("screenTarget")  + n, 0)
             });
         }
     }
@@ -190,6 +217,7 @@ void DropdownAnyKCM::save()
         cfg.writeEntry(QStringLiteral("shortcut")      + n, m_slots[i].shortcut);
         cfg.writeEntry(QStringLiteral("widthPercent")  + n, m_slots[i].widthPercent);
         cfg.writeEntry(QStringLiteral("heightPercent") + n, m_slots[i].heightPercent);
+        cfg.writeEntry(QStringLiteral("screenTarget")  + n, m_slots[i].screenTarget);
     }
     // Remove stale entries beyond current count
     for (int i = m_slots.size(); i < 20; i++) {
@@ -198,6 +226,7 @@ void DropdownAnyKCM::save()
         cfg.deleteEntry(QStringLiteral("shortcut")      + n);
         cfg.deleteEntry(QStringLiteral("widthPercent")  + n);
         cfg.deleteEntry(QStringLiteral("heightPercent") + n);
+        cfg.deleteEntry(QStringLiteral("screenTarget")  + n);
     }
     cfg.writeEntry(QStringLiteral("debugMode"), m_debugMode);
     cfg.sync();
