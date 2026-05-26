@@ -47,8 +47,18 @@
     // returned by clientArea() — this works because Qt 6's QJSEngine exposes
     // Q_GADGETs as mutable JavaScript values.
     //
-    function applyDropdownGeometry(win, widthPct, heightPct) {
-        var area = workspace.clientArea(KWin.MaximizeArea, workspace.activeScreen, workspace.currentDesktop);
+    function resolveScreen(screenTarget) {
+        if (screenTarget === 0) {
+            return workspace.screenAt(workspace.cursorPos) || workspace.activeScreen;
+        }
+        var idx = screenTarget - 1;
+        if (idx >= 0 && idx < workspace.screens.length) return workspace.screens[idx];
+        return workspace.activeScreen;
+    }
+
+    function applyDropdownGeometry(win, widthPct, heightPct, screenTarget) {
+        var screen = resolveScreen(screenTarget);
+        var area = workspace.clientArea(KWin.MaximizeArea, screen, workspace.currentDesktop);
         var fullW = area.width;
         var fullH = area.height;
         area.width  = Math.round(fullW * widthPct);
@@ -82,7 +92,7 @@
     var hiddenWindows = {}; // windowClass → { x, y, width, height }
 
     // ── Toggle ────────────────────────────────────────────────────────────────
-    function toggleWindow(windowClass, shortcut, widthPct, heightPct) {
+    function toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget) {
         var win = findByClass(windowClass);
         if (!win) {
             dbg(shortcut + " → " + windowClass + "\nWindow not found");
@@ -139,7 +149,7 @@
         } else {
             // First show (or window was minimized by the user): size and position
             // the window as a dropdown, then animate from wherever it currently is.
-            applyDropdownGeometry(win, widthPct, heightPct);
+            applyDropdownGeometry(win, widthPct, heightPct, screenTarget);
         }
 
         // Restore taskbar/pager/switcher visibility now that the window is on-screen.
@@ -159,16 +169,17 @@
         var sc   = readConfig("shortcut"      + i, "").trim();
         var wPct = readConfig("widthPercent"  + i, 100) / 100.0;
         var hPct = readConfig("heightPercent" + i, 50)  / 100.0;
+        var sPct = readConfig("screenTarget"  + i, 0);
         if (cls === "" || sc === "") continue;
 
-        (function (windowClass, shortcut, widthPct, heightPct) {
+        (function (windowClass, shortcut, widthPct, heightPct, screenTarget) {
             registerShortcut(
                 "DropdownAny-" + windowClass,
                 "Dropdown toggle: " + windowClass,
                 shortcut,
-                function () { toggleWindow(windowClass, shortcut, widthPct, heightPct); }
+                function () { toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget); }
             );
-        })(cls, sc, wPct, hPct);
+        })(cls, sc, wPct, hPct, sPct);
 
         registered++;
     }
