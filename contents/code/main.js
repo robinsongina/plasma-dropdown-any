@@ -87,9 +87,35 @@
     // ── Hidden-windows tracker ────────────────────────────────────────────────
     //
     // Stores the on-screen geometry for each window we've moved off-screen.
-    // Key: windowClass string  Value: { x, y, width, height }
+    // Key: windowClass string  Value: { x, y, width, height, savedOpacity }
     //
-    var hiddenWindows = {}; // windowClass → { x, y, width, height }
+    var hiddenWindows = {}; // windowClass → { x, y, width, height, savedOpacity }
+
+    // ── Hide helper ───────────────────────────────────────────────────────────
+    function hideWindow(windowClass) {
+        var win = findByClass(windowClass);
+        if (!win) return;
+        // Guard: already off-screen — don't re-hide / re-snapshot.
+        if (hiddenWindows[windowClass] !== undefined) return;
+
+        var g = win.frameGeometry;
+        hiddenWindows[windowClass] = {
+            x: g.x, y: g.y, width: g.width, height: g.height,
+            savedOpacity: win.opacity
+        };
+
+        win.skipTaskbar  = true;
+        win.skipPager    = true;
+        win.skipSwitcher = true;
+
+        // Restore user's original opacity BEFORE sliding out so the next show
+        // re-snapshots a clean value and we never lose the original.
+        win.opacity = hiddenWindows[windowClass].savedOpacity;
+
+        win.frameGeometry = { x: g.x, y: -g.height, width: g.width, height: g.height };
+
+        dbg("auto/shortcut hide → " + windowClass + "\nAction: hidden (slide-out)");
+    }
 
     // ── Toggle ────────────────────────────────────────────────────────────────
     function toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget) {
@@ -105,20 +131,7 @@
         // ── Hide ──────────────────────────────────────────────────────────────
         // Window is visible (not in our off-screen tracker, not minimized) and focused.
         if (!isHidden && !isMinimized && win.active) {
-            // Save the current on-screen geometry so we can restore it later.
-            var g = win.frameGeometry;
-            hiddenWindows[windowClass] = { x: g.x, y: g.y, width: g.width, height: g.height };
-
-            // Remove from taskbar/pager/switcher so it doesn't appear as an
-            // accessible window while it is parked off-screen.
-            win.skipTaskbar  = true;
-            win.skipPager    = true;
-            win.skipSwitcher = true;
-
-            // Move off-screen — kwin4_effect_geometry_change animates this slide-out.
-            win.frameGeometry = { x: g.x, y: -g.height, width: g.width, height: g.height };
-
-            dbg(shortcut + " → " + windowClass + " [" + (win.caption || "") + "]\nAction: hidden (slide-out)");
+            hideWindow(windowClass);
             return;
         }
 
