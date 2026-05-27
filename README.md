@@ -1,12 +1,22 @@
 # plasma-dropdown-any
 
-KWin script para Plasma 6 que convierte cualquier ventana en un panel dropdown estilo Yakuake — activada y ocultada con un shortcut global configurable.
+KWin script for Plasma 6 that turns any window into a Yakuake-style dropdown panel — shown and hidden with a configurable global shortcut.
 
-Funciona con **cualquier aplicación** identificada por su `resourceClass` (Konsole, Kitty, Sublime Text, Obsidian, etc.). Hasta 10 ventanas independientes, cada una con su propio shortcut.
+Works with **any application** identified by its `resourceClass` (Konsole, Kitty, Sublime Text, Obsidian, etc.). Up to 10 independent slots, each with its own shortcut and settings.
 
 ---
 
-## Instalación rápida
+## Slide animation
+
+The script hides windows by moving them off-screen (`y = -height`) instead of minimizing, so any geometry-change effect can animate the slide.
+
+For a smooth Yakuake-style slide, install **[kwin4_effect_geometry_change](https://github.com/peterfajdiga/kwin4_effect_geometry_change)** and enable it in:
+
+**System Settings → Desktop Effects → GeometryChange**
+
+---
+
+## Quick install
 
 ```bash
 git clone <repo>
@@ -14,40 +24,42 @@ cd plasma-dropdown-any
 bash install.sh
 ```
 
-Después: **System Settings → Window Management → KWin Scripts → plasma-dropdown-any → Configure**
+Then: **System Settings → Window Management → KWin Scripts → plasma-dropdown-any → Configure**
 
 ---
 
-## Configuración
+## Configuration
 
-Cada slot tiene dos campos:
+Each slot is configured independently with the following fields:
 
-| Campo | Descripción | Ejemplo |
+| Field | Description | Example |
 |-------|-------------|---------|
-| Window class | El `resourceClass` de la ventana | `konsole`, `kitty`, `sublime_text` |
-| Default shortcut | Tecla inicial (se puede cambiar luego en System Settings → Shortcuts) | `F12`, `Meta+F1`, `Ctrl+F12` |
+| Window class | The window's `resourceClass` | `konsole`, `kitty`, `sublime_text` |
+| Shortcut | Global shortcut key | `F12`, `Meta+F1`, `Ctrl+F12` |
+| Width % | Window width as a percentage of the screen | `100` |
+| Height % | Window height as a percentage of the screen | `50` |
+| Screen | Where the dropdown opens | Cursor screen, Screen 1, Screen 2… |
+| Opacity % | Window alpha on show (0–100) | `90` |
+| All workspaces | Pin the window to all virtual desktops | ✓ |
+| Auto-hide on focus loss | Hide automatically when the window loses focus | ✓ |
 
-**Encontrar el resourceClass de una ventana — forma rápida:**
+### Finding a window's resource class
 
-Con el script activo, presioná `Meta+Shift+W`. Aparece un OSD con todas las clases de ventanas abiertas en ese momento (ej: `obsidian · sublime_text · vivaldi-stable`).
+With the script active, press **`Meta+Shift+W`**. An OSD lists all open windows and their resource classes (e.g. `obsidian · sublime_text · vivaldi-stable`).
 
-El shortcut es configurable en System Settings → Shortcuts → KWin → "Dropdown Any: List active window classes".
+The shortcut is configurable in System Settings → Shortcuts → KWin → *"Dropdown Any: List active window classes"*.
 
-**Alternativa manual desde terminal:**
+### Manual config via terminal
 
 ```bash
-qdbus6 org.kde.KWin /KWin org.kde.KWin.supportInformation 2>/dev/null | grep -o 'resourceClass.*' | head -20
+kwriteconfig6 --file kwinrc --group "Script-plasma-dropdown-any" \
+  --key windowClass1 "konsole" \
+  --key shortcut1    "F12" \
+  --key widthPercent1  "100" \
+  --key heightPercent1 "50"
 ```
 
-**Configurar manualmente desde terminal:**
-
-```bash
-kwriteconfig6 --file kwinrc --group "Script-plasma-dropdown-any" --key windowClass1 "konsole"
-kwriteconfig6 --file kwinrc --group "Script-plasma-dropdown-any" --key shortcut1    "F12"
-kwriteconfig6 --file kwinrc --group "Script-plasma-dropdown-any" --key heightPercent "50"
-```
-
-Recargar el script después de cambiar config:
+Reload the script after changing config manually:
 
 ```bash
 qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "plasma-dropdown-any"
@@ -56,100 +68,102 @@ qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.start
 
 ---
 
-## Comportamiento
+## Behavior
 
-Al presionar el shortcut:
+When the shortcut fires:
 
-- **Ventana activa** → se minimiza.
-- **Ventana minimizada o inactiva** → se posiciona en el top de la pantalla (ancho 100%, altura configurable), se activa con `keepAbove=true`.
+- **Window is active (focused)** → slides off-screen (hidden, removed from taskbar/switcher).
+- **Window is off-screen or minimized** → repositioned on the configured screen at the configured size, shown above all other windows.
 
-La animación usa el efecto de minimizar configurado en KWin. Para el slide estilo Yakuake: activar **Desktop Effects → Slide** en System Settings.
+Config changes (screen, size, opacity) take effect on the next **show**. No reload required for most settings.
 
 ---
 
-## Arquitectura
+## Project structure
 
 ```
 plasma-dropdown-any/
-├── metadata.json              # Manifest del plugin (X-Plasma-API: javascript)
+├── metadata.json              # Plugin manifest (X-Plasma-API: javascript)
 ├── contents/
-│   ├── code/main.js           # Lógica principal
-│   ├── config/main.xml        # Schema KConfigXT (10 slots + heightPercent)
-│   └── ui/config.qml          # UI de configuración en System Settings
-├── install.sh                 # kpackagetool6 wrapper
+│   └── code/main.js           # Core KWin script logic
+├── kcm/                       # System Settings configuration module (C++ + QML)
+│   ├── CMakeLists.txt
+│   ├── kcm_dropdown_any.h
+│   ├── kcm_dropdown_any.cpp
+│   └── ui/main.qml
+├── install.sh                 # Build KCM + install script + reload KWin
 └── uninstall.sh
 ```
 
-**Config** se almacena en `~/.config/kwinrc` bajo `[Script-plasma-dropdown-any]`.
+Config is stored in `~/.config/kwinrc` under `[Script-plasma-dropdown-any]`.
 
-**Shortcuts** se almacenan en `~/.config/kglobalshortcutsrc` bajo `[kwin]` con el ID `DropdownAny-<windowClass>`.
+Shortcuts are stored in `~/.config/kglobalshortcutsrc` under `[kwin]` with key `DropdownAny-<windowClass>`.
 
 ---
 
 ## Debugging
 
-### 1. Verificar que el script cargó
+### 1. Verify the script loaded
 
 ```bash
 qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "plasma-dropdown-any"
 # → true
 ```
 
-### 2. Ver logs en tiempo real
+### 2. Watch logs in real time
 
 ```bash
 journalctl -t kwin_wayland -f --no-pager | grep "DropdownAny"
 ```
 
-El script loguea al cargar:
+On load, the script prints:
 ```
 [DropdownAny] loaded — 1/10 slots active.
 ```
 
-### 3. Disparar el shortcut manualmente (sin teclado)
+### 3. Trigger a shortcut manually (no keyboard)
 
 ```bash
 qdbus6 org.kde.kglobalaccel /component/kwin \
   org.kde.kglobalaccel.Component.invokeShortcut "DropdownAny-<windowClass>"
-# Ejemplo: "DropdownAny-konsole"
+# Example: "DropdownAny-konsole"
 ```
 
-### 4. Verificar que el shortcut está registrado
+### 4. Verify a shortcut is registered
 
 ```bash
 grep "DropdownAny" ~/.config/kglobalshortcutsrc
-# Debe mostrar: DropdownAny-<class>=<key>,<default>,<description>
+# Should show: DropdownAny-<class>=<key>,<default>,<description>
 ```
 
-Si aparece con shortcut vacío o `none`, forzar manualmente:
+If the entry shows an empty or `none` shortcut, set it manually:
 
 ```bash
 kwriteconfig6 --file kglobalshortcutsrc --group kwin \
   --key "DropdownAny-konsole" "F12,F12,Dropdown toggle: konsole"
 ```
 
-### 5. Verificar la geometría de una ventana
+### 5. Check a window's geometry
 
 ```bash
 cat > /tmp/kwin_check.js << 'EOF'
 workspace.windowList().forEach(function(w) {
   if (w.resourceClass === "konsole") {
     var g = w.frameGeometry;
-    console.log("[CHECK] min=" + w.minimized +
-                " geo=" + g.x.toFixed(0) + "," + g.y.toFixed(0) +
+    console.log("[CHECK] geo=" + g.x.toFixed(0) + "," + g.y.toFixed(0) +
                 " " + g.width.toFixed(0) + "x" + g.height.toFixed(0) +
-                " keepAbove=" + w.keepAbove);
+                " keepAbove=" + w.keepAbove + " opacity=" + w.opacity);
   }
 });
 EOF
 
-ID=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript /tmp/kwin_check.js "check")
+ID=$(qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript /tmp/kwin_check.js)
 qdbus6 org.kde.KWin /Scripting/Script${ID} org.kde.kwin.Script.run
 sleep 0.5
 journalctl -t kwin_wayland -n 10 --no-pager | grep "CHECK"
 ```
 
-### 6. Recargar el script
+### 6. Reload the script
 
 ```bash
 qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "plasma-dropdown-any"
@@ -157,9 +171,9 @@ sleep 0.5
 qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.start
 ```
 
-> `start` solo carga scripts que **no están ya cargados**. Hay que hacer el unload primero.
+> `start` only loads scripts that are **not already loaded**. Always unload first.
 
-### 7. Reinstalar desde cero
+### 7. Reinstall from scratch
 
 ```bash
 bash uninstall.sh
@@ -168,21 +182,20 @@ bash install.sh
 
 ---
 
-## Gotchas conocidos de Plasma 6
+## Known Plasma 6 gotchas
 
-| Problema | Causa | Solución |
-|----------|-------|----------|
-| `Qt is not defined` | `Qt` no está disponible en KWin JS scripts en Plasma 6 | Mutar el QRectF devuelto por `clientArea()` en lugar de `Qt.rect()` |
-| `readConfig is not defined` en QML | Los globals de KWin no se inyectan en scripts `declarativescript` en algunas versiones | Usar `X-Plasma-API: javascript` con `main.js` |
-| Shortcut registrado con `none` | El shortcut pedido ya estaba tomado por otra app (ej. F12 → Yakuake) | Usar otro shortcut o forzar en `kglobalshortcutsrc` manualmente |
-| `unloadScript` retorna `false` | El script no estaba cargado (normal en el primer run) | Ignorar, seguir con `start` |
-| Script no recarga con solo `start` | KWin no recarga scripts ya en memoria | Siempre hacer `unloadScript` + `start` |
-| `metadata.json` sin `X-Plasma-MainScript` | KWin no sabe qué archivo ejecutar | Siempre incluir este campo |
-| Botón **Configure** no aparece en System Settings | Falta `X-KDE-ConfigModule` en `metadata.json` | Agregar `"X-KDE-ConfigModule": "kwin/effects/configs/kcm_kwin4_genericscripted"` |
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `Qt is not defined` | `Qt` namespace is not available in KWin JS scripts on Plasma 6 | Mutate the `QRectF` returned by `clientArea()` instead of using `Qt.rect()` |
+| `readConfig is not defined` in QML | KWin globals are not injected into `declarativescript` in some versions | Use `X-Plasma-API: javascript` with `main.js` |
+| Shortcut registered as `none` | The requested key was already taken by another app (e.g. F12 → Yakuake) | Use a different shortcut or set it manually in `kglobalshortcutsrc` |
+| `unloadScript` returns `false` | Script was not loaded (normal on first run) | Ignore, proceed with `start` |
+| Script does not reload with just `start` | KWin does not reload scripts already in memory | Always run `unloadScript` + `start` |
+| **Configure** button missing in System Settings | Missing `X-KDE-ConfigModule` in `metadata.json` | Add `"X-KDE-ConfigModule": "kwin/effects/configs/kcm_dropdown_any"` |
 
 ---
 
-## Desinstalar
+## Uninstall
 
 ```bash
 bash uninstall.sh
