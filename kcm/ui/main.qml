@@ -38,14 +38,20 @@ KCM.SimpleKCM {
                 shortcut:      data[i].shortcut     || "",
                 widthPercent:  data[i].widthPercent  !== undefined ? data[i].widthPercent  : 100,
                 heightPercent: data[i].heightPercent !== undefined ? data[i].heightPercent : 50,
-                screenTarget:  data[i].screenTarget  !== undefined ? data[i].screenTarget  : 0
+                screenTarget:  data[i].screenTarget  !== undefined ? data[i].screenTarget  : 0,
+                opacity:       data[i].opacity       !== undefined ? data[i].opacity       : 100,
+                allDesktops:   data[i].allDesktops   !== undefined ? data[i].allDesktops   : false,
+                autoHide:      data[i].autoHide      !== undefined ? data[i].autoHide      : false
             })
         }
     }
 
     function pushSlot(idx) {
         const row = slotModel.get(idx)
-        kcm.setSlot(idx, row.windowClass, row.shortcut, row.widthPercent, row.heightPercent, row.screenTarget)
+        kcm.setSlot(idx,
+            row.windowClass, row.shortcut,
+            row.widthPercent, row.heightPercent, row.screenTarget,
+            row.opacity, row.allDesktops, row.autoHide)
     }
 
     ColumnLayout {
@@ -318,6 +324,49 @@ KCM.SimpleKCM {
                                 Controls.ToolTip.delay: 500
                                 onClicked: kcm.removeSlot(slotRow.slotIdx)
                             }
+                        }
+
+                        RowLayout {
+                            width: parent.width
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Item { Layout.preferredWidth: 20 }
+
+                            Controls.Label {
+                                text: qsTr("Opacity")
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            Controls.SpinBox {
+                                Layout.preferredWidth: 90
+                                from: 0; to: 100; stepSize: 5
+                                value: model.opacity
+                                textFromValue: function(v) { return v + " %" }
+                                onValueModified: {
+                                    slotModel.set(index, { opacity: value })
+                                    pushSlot(index)
+                                }
+                            }
+
+                            Controls.CheckBox {
+                                text: qsTr("All workspaces")
+                                checked: model.allDesktops
+                                onToggled: {
+                                    slotModel.set(index, { allDesktops: checked })
+                                    pushSlot(index)
+                                }
+                            }
+
+                            Controls.CheckBox {
+                                text: qsTr("Auto-hide on focus loss")
+                                checked: model.autoHide
+                                onToggled: {
+                                    slotModel.set(index, { autoHide: checked })
+                                    pushSlot(index)
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
                         }
 
                         Kirigami.InlineMessage {
