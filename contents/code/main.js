@@ -118,7 +118,8 @@
     }
 
     // ── Toggle ────────────────────────────────────────────────────────────────
-    function toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget) {
+    function toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget,
+                          opacity, allDesktops, autoHide) {
         var win = findByClass(windowClass);
         if (!win) {
             dbg(shortcut + " → " + windowClass + "\nWindow not found");
@@ -164,6 +165,9 @@
         // animates the slide-in regardless of how we got here.
         applyDropdownGeometry(win, widthPct, heightPct, screenTarget);
 
+        win.onAllDesktops = allDesktops;
+        win.opacity = opacity / 100.0;
+
         // Restore taskbar/pager/switcher visibility now that the window is on-screen.
         win.skipTaskbar  = false;
         win.skipPager    = false;
@@ -181,17 +185,37 @@
         var sc   = readConfig("shortcut"      + i, "").trim();
         var wPct = readConfig("widthPercent"  + i, 100) / 100.0;
         var hPct = readConfig("heightPercent" + i, 50)  / 100.0;
-        var sPct = readConfig("screenTarget"  + i, 0);
+        var sPct  = readConfig("screenTarget"  + i, 0);
+        var opc   = readConfig("opacity"       + i, 100);
+        var allD  = readConfig("allDesktops"   + i, false);
+        var aHide = readConfig("autoHide"      + i, false);
         if (cls === "" || sc === "") continue;
 
-        (function (windowClass, shortcut, widthPct, heightPct, screenTarget) {
+        (function (windowClass, shortcut, widthPct, heightPct, screenTarget,
+                   opacity, allDesktops, autoHide) {
             registerShortcut(
                 "DropdownAny-" + windowClass,
                 "Dropdown toggle: " + windowClass,
                 shortcut,
-                function () { toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget); }
+                function () {
+                    toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget,
+                                 opacity, allDesktops, autoHide);
+                }
             );
-        })(cls, sc, wPct, hPct, sPct);
+
+            if (autoHide === true) {
+                workspace.windowActivated.connect(function (activeWin) {
+                    // Already parked off-screen — don't re-hide.
+                    if (hiddenWindows[windowClass] !== undefined) return;
+                    var win = findByClass(windowClass);
+                    if (!win) return;
+                    // We are the newly-active window — don't self-hide.
+                    if (activeWin === win) return;
+                    // Any other focus target (including null = desktop) → hide.
+                    hideWindow(windowClass);
+                });
+            }
+        })(cls, sc, wPct, hPct, sPct, opc, allD, aHide);
 
         registered++;
     }
