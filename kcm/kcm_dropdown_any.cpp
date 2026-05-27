@@ -87,28 +87,36 @@ QVariantList DropdownAnyKCM::slots() const
         m[QStringLiteral("widthPercent")]  = s.widthPercent;
         m[QStringLiteral("heightPercent")] = s.heightPercent;
         m[QStringLiteral("screenTarget")]  = s.screenTarget;
+        m[QStringLiteral("opacity")]       = s.opacity;
+        m[QStringLiteral("allDesktops")]   = s.allDesktops;
+        m[QStringLiteral("autoHide")]      = s.autoHide;
         list << m;
     }
     return list;
 }
 
 void DropdownAnyKCM::setSlot(int idx, const QString &windowClass, const QString &shortcut,
-                              int widthPct, int heightPct, int screenTarget)
+                              int widthPct, int heightPct, int screenTarget,
+                              int opacity, bool allDesktops, bool autoHide)
 {
     if (idx < 0 || idx >= m_slots.size()) return;
     qDebug() << "[DropdownAny] KCM setSlot" << idx + 1
              << "| class:" << (windowClass.isEmpty() ? QStringLiteral("(empty)") : windowClass)
              << "| shortcut:" << (shortcut.isEmpty() ? QStringLiteral("(none)") : shortcut)
              << "| size:" << widthPct << "x" << heightPct
-             << "| screen:" << screenTarget;
-    m_slots[idx] = {windowClass, shortcut, widthPct, heightPct, screenTarget};
+             << "| screen:" << screenTarget
+             << "| opacity:" << opacity
+             << "| allDesktops:" << allDesktops
+             << "| autoHide:" << autoHide;
+    m_slots[idx] = {windowClass, shortcut, widthPct, heightPct, screenTarget,
+                    opacity, allDesktops, autoHide};
     setNeedsSave(true);
     Q_EMIT slotsChanged();
 }
 
 void DropdownAnyKCM::addSlot()
 {
-    m_slots.append({QString(), QString(), 100, 50, 0});
+    m_slots.append({QString(), QString(), 100, 50, 0, 100, false, false});
     qDebug() << "[DropdownAny] KCM addSlot → total slots:" << m_slots.size();
     setNeedsSave(true);
     Q_EMIT slotsChanged();
@@ -116,7 +124,7 @@ void DropdownAnyKCM::addSlot()
 
 void DropdownAnyKCM::addSlotWithClass(const QString &windowClass)
 {
-    m_slots.append({windowClass.trimmed(), QString(), 100, 50, 0});
+    m_slots.append({windowClass.trimmed(), QString(), 100, 50, 0, 100, false, false});
     qDebug() << "[DropdownAny] KCM addSlot with class:" << windowClass
              << "→ total slots:" << m_slots.size();
     setNeedsSave(true);
@@ -152,7 +160,10 @@ void DropdownAnyKCM::load()
                 cfg.readEntry(QStringLiteral("shortcut")      + n, QString()),
                 cfg.readEntry(QStringLiteral("widthPercent")  + n, 100),
                 cfg.readEntry(QStringLiteral("heightPercent") + n, 50),
-                cfg.readEntry(QStringLiteral("screenTarget")  + n, 0)
+                cfg.readEntry(QStringLiteral("screenTarget")  + n, 0),
+                cfg.readEntry(QStringLiteral("opacity")       + n, 100),
+                cfg.readEntry(QStringLiteral("allDesktops")   + n, false),
+                cfg.readEntry(QStringLiteral("autoHide")      + n, false)
             });
         }
     } else {
@@ -166,7 +177,10 @@ void DropdownAnyKCM::load()
                 cls, sc,
                 cfg.readEntry(QStringLiteral("widthPercent")  + n, 100),
                 cfg.readEntry(QStringLiteral("heightPercent") + n, 50),
-                cfg.readEntry(QStringLiteral("screenTarget")  + n, 0)
+                cfg.readEntry(QStringLiteral("screenTarget")  + n, 0),
+                cfg.readEntry(QStringLiteral("opacity")       + n, 100),
+                cfg.readEntry(QStringLiteral("allDesktops")   + n, false),
+                cfg.readEntry(QStringLiteral("autoHide")      + n, false)
             });
         }
     }
@@ -218,6 +232,9 @@ void DropdownAnyKCM::save()
         cfg.writeEntry(QStringLiteral("widthPercent")  + n, m_slots[i].widthPercent);
         cfg.writeEntry(QStringLiteral("heightPercent") + n, m_slots[i].heightPercent);
         cfg.writeEntry(QStringLiteral("screenTarget")  + n, m_slots[i].screenTarget);
+        cfg.writeEntry(QStringLiteral("opacity")       + n, m_slots[i].opacity);
+        cfg.writeEntry(QStringLiteral("allDesktops")   + n, m_slots[i].allDesktops);
+        cfg.writeEntry(QStringLiteral("autoHide")      + n, m_slots[i].autoHide);
     }
     // Remove stale entries beyond current count
     for (int i = m_slots.size(); i < 20; i++) {
@@ -227,6 +244,9 @@ void DropdownAnyKCM::save()
         cfg.deleteEntry(QStringLiteral("widthPercent")  + n);
         cfg.deleteEntry(QStringLiteral("heightPercent") + n);
         cfg.deleteEntry(QStringLiteral("screenTarget")  + n);
+        cfg.deleteEntry(QStringLiteral("opacity")       + n);
+        cfg.deleteEntry(QStringLiteral("allDesktops")   + n);
+        cfg.deleteEntry(QStringLiteral("autoHide")      + n);
     }
     cfg.writeEntry(QStringLiteral("debugMode"), m_debugMode);
     cfg.sync();
