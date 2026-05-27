@@ -31,7 +31,10 @@ public:
                              const QString &shortcut,
                              int widthPct,
                              int heightPct,
-                             int screenTarget);
+                             int screenTarget,
+                             int opacity,
+                             bool allDesktops,
+                             bool autoHide);
     Q_INVOKABLE void addSlot();
     Q_INVOKABLE void addSlotWithClass(const QString &windowClass);
     Q_INVOKABLE void removeSlot(int idx);
@@ -56,9 +59,12 @@ private:
     struct SlotData {
         QString windowClass;
         QString shortcut;
-        int widthPercent  = 100;
-        int heightPercent = 50;
-        int screenTarget  = 0;
+        int  widthPercent  = 100;
+        int  heightPercent = 50;
+        int  screenTarget  = 0;
+        int  opacity       = 100;
+        bool allDesktops   = false;
+        bool autoHide      = false;
     };
 
     QList<SlotData> m_slots;
