@@ -43,6 +43,23 @@ Each slot is configured independently with the following fields:
 | All workspaces | Pin the window to all virtual desktops | ✓ |
 | Auto-hide on focus loss | Hide automatically when the window loses focus | ✓ |
 
+### Live resize shortcuts
+
+While a dropdown window is active (focused), four shortcuts adjust its size in real time:
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+Shift+Up` | Increase height by 5 % |
+| `Alt+Shift+Down` | Decrease height by 5 % |
+| `Alt+Shift+Right` | Increase width by 5 % |
+| `Alt+Shift+Left` | Decrease width by 5 % |
+
+Changes apply immediately and are persisted to `kwinrc` — the new percentages survive script reloads and system restarts. The Configure dialog reflects the updated values on next open.
+
+The shortcuts only do anything when the active window is a managed dropdown. If any other window is focused, they are silently ignored.
+
+> **Note:** KWin scripting requires all shortcuts to be registered with KDE's global shortcut system (KGlobalAccel). These four shortcuts will appear in **System Settings → Keyboard → Shortcuts → KWin**. This is a platform limitation — there is no way to have "private" shortcuts in a KWin script. The default key bindings can be changed or removed from that dialog.
+
 ### Finding a window's resource class
 
 With the script active, press **`Meta+Shift+W`**. An OSD lists all open windows and their resource classes (e.g. `obsidian · sublime_text · vivaldi-stable`).
