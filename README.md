@@ -26,14 +26,14 @@ The KCM is a C++ plugin that must be compiled before installing. You need:
 | Extra CMake Modules | 6.0 | `extra-cmake-modules` | `extra-cmake-modules` |
 | GCC or Clang | C++17 | `gcc` | `gcc` |
 | Qt6 (Core, Quick, DBus) | 6.x | `qt6-base` `qt6-declarative` | `qt6-qtbase-devel` `qt6-qtdeclarative-devel` |
-| KF6 KCMUtils | 6.x | `kf6-kcmutils` | `kf6-kcmutils-devel` |
-| KF6 Config | 6.x | `kf6-kconfig` | `kf6-kconfig-devel` |
-| KF6 CoreAddons | 6.x | `kf6-kcoreaddons` | `kf6-kcoreaddons-devel` |
+| KF6 KCMUtils | 6.x | `kcmutils` | `kf6-kcmutils-devel` |
+| KF6 Config | 6.x | `kconfig` | `kf6-kconfig-devel` |
+| KF6 CoreAddons | 6.x | `kcoreaddons` | `kf6-kcoreaddons-devel` |
 
 **Arch / CachyOS / Manjaro:**
 ```bash
 sudo pacman -S cmake extra-cmake-modules gcc qt6-base qt6-declarative \
-               kf6-kcmutils kf6-kconfig kf6-kcoreaddons
+               kcmutils kconfig kcoreaddons
 ```
 
 **Fedora:**
@@ -69,7 +69,11 @@ cd plasma-dropdown-any
 bash install.sh
 ```
 
-Then: **System Settings → Window Management → KWin Scripts → plasma-dropdown-any → Configure**
+Then **log out and log back in** so the KCM plugin path is picked up by Plasma. After that:
+
+**System Settings → Window Management → KWin Scripts → plasma-dropdown-any → Configure**
+
+> If the **Configure** button doesn't appear after logging back in, make sure all build dependencies were installed before running `install.sh`. Missing KF6 packages cause the KCM to silently skip compilation.
 
 ---
 
