@@ -6,6 +6,51 @@ Works with **any application** identified by its `resourceClass` (Konsole, Kitty
 
 ---
 
+## Dependencies
+
+### Runtime
+
+| Dependency | Notes |
+|-----------|-------|
+| **Plasma 6 / KWin 6** | Required — the script runs inside the KWin scripting engine |
+| **kpackagetool6** | Required — used by `install.sh` to register the script package |
+| **qdbus6** | Required — used by `install.sh` to reload KWin after install |
+
+### Build (KCM configuration module)
+
+The KCM is a C++ plugin that must be compiled before installing. You need:
+
+| Dependency | Min version | Arch package | Fedora package |
+|-----------|------------|--------------|----------------|
+| CMake | 3.20 | `cmake` | `cmake` |
+| Extra CMake Modules | 6.0 | `extra-cmake-modules` | `extra-cmake-modules` |
+| GCC or Clang | C++17 | `gcc` | `gcc` |
+| Qt6 (Core, Quick, DBus) | 6.x | `qt6-base` `qt6-declarative` | `qt6-qtbase-devel` `qt6-qtdeclarative-devel` |
+| KF6 KCMUtils | 6.x | `kf6-kcmutils` | `kf6-kcmutils-devel` |
+| KF6 Config | 6.x | `kf6-kconfig` | `kf6-kconfig-devel` |
+| KF6 CoreAddons | 6.x | `kf6-kcoreaddons` | `kf6-kcoreaddons-devel` |
+
+**Arch / CachyOS / Manjaro:**
+```bash
+sudo pacman -S cmake extra-cmake-modules gcc qt6-base qt6-declarative \
+               kf6-kcmutils kf6-kconfig kf6-kcoreaddons
+```
+
+**Fedora:**
+```bash
+sudo dnf install cmake extra-cmake-modules gcc-c++ \
+                 qt6-qtbase-devel qt6-qtdeclarative-devel \
+                 kf6-kcmutils-devel kf6-kconfig-devel kf6-kcoreaddons-devel
+```
+
+### Optional
+
+| Dependency | Purpose |
+|-----------|---------|
+| **[kwin4_effect_geometry_change](https://github.com/peterfajdiga/kwin4_effect_geometry_change)** | Slide animation — without it the window still appears/disappears but without a transition |
+
+---
+
 ## Slide animation
 
 The script hides windows by moving them off-screen (`y = -height`) instead of minimizing, so any geometry-change effect can animate the slide.
