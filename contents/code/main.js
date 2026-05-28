@@ -91,6 +91,14 @@
     //
     var hiddenWindows = {}; // windowClass → { x, y, width, height, savedOpacity }
 
+    // ── Slot config (mutable) ─────────────────────────────────────────────────
+    //
+    // Populated during shortcut registration. Keeps live widthPct/heightPct so
+    // the resize shortcuts can update them and have toggleWindow pick up the new
+    // values immediately (without waiting for a script reload).
+    //
+    var slotConfig = {}; // windowClass → { idx, widthPct, heightPct, screenTarget, opacity, allDesktops, autoHide }
+
     // ── Hide helper ───────────────────────────────────────────────────────────
     function hideWindow(windowClass) {
         var win = findByClass(windowClass);
@@ -118,14 +126,14 @@
     }
 
     // ── Toggle ────────────────────────────────────────────────────────────────
-    function toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget,
-                          opacity, allDesktops, autoHide) {
+    function toggleWindow(windowClass, shortcut) {
         var win = findByClass(windowClass);
         if (!win) {
             dbg(shortcut + " → " + windowClass + "\nWindow not found");
             return;
         }
 
+        var slot        = slotConfig[windowClass];
         var isHidden    = hiddenWindows[windowClass] !== undefined;
         var isMinimized = win.minimized;
 
@@ -161,12 +169,11 @@
         }
 
         // Always position on the configured screen (cursor screen, Screen 1, etc.).
-        // The effect sees the geometry change from off-screen → visible and
-        // animates the slide-in regardless of how we got here.
-        applyDropdownGeometry(win, widthPct, heightPct, screenTarget);
+        // Uses slotConfig so live resize changes take effect immediately.
+        applyDropdownGeometry(win, slot.widthPct, slot.heightPct, slot.screenTarget);
 
-        win.onAllDesktops = allDesktops;
-        win.opacity = opacity / 100.0;
+        win.onAllDesktops = slot.allDesktops;
+        win.opacity = slot.opacity / 100.0;
 
         // Restore taskbar/pager/switcher visibility now that the window is on-screen.
         win.skipTaskbar  = false;
@@ -176,6 +183,38 @@
         workspace.activeWindow = win;
 
         dbg(shortcut + " → " + windowClass + " [" + (win.caption || "") + "]\nAction: shown (slide-in)");
+    }
+
+    // ── Live resize ───────────────────────────────────────────────────────────
+    //
+    // Adjusts width or height of the currently active dropdown window by 5 %.
+    // Updates slotConfig (in-session) and persists to kwinrc via writeConfig.
+    //
+    var RESIZE_STEP = 0.05;
+
+    function resizeActive(dw, dh) {
+        var win = workspace.activeWindow;
+        if (!win) return;
+        var lc   = win.resourceClass.toLowerCase();
+        var slot = null;
+        var matchedClass = null;
+        for (var wc in slotConfig) {
+            if (wc.toLowerCase() === lc) { slot = slotConfig[wc]; matchedClass = wc; break; }
+        }
+        if (!slot) return; // active window is not a managed dropdown
+
+        slot.widthPct  = Math.max(0.10, Math.min(1.0, slot.widthPct  + dw));
+        slot.heightPct = Math.max(0.10, Math.min(1.0, slot.heightPct + dh));
+
+        applyDropdownGeometry(win, slot.widthPct, slot.heightPct, slot.screenTarget);
+
+        // Persist to kwinrc so the new values survive script reload.
+        writeConfig("widthPercent"  + slot.idx, Math.round(slot.widthPct  * 100));
+        writeConfig("heightPercent" + slot.idx, Math.round(slot.heightPct * 100));
+
+        dbg("Resize " + matchedClass +
+            " → w:" + Math.round(slot.widthPct  * 100) + "%" +
+            " h:" + Math.round(slot.heightPct * 100) + "%");
     }
 
     // ── Shortcut registration ─────────────────────────────────────────────────
@@ -191,19 +230,20 @@
         var aHide = readConfig("autoHide"      + i, false);
         if (cls === "" || sc === "") continue;
 
-        (function (windowClass, shortcut, widthPct, heightPct, screenTarget,
-                   opacity, allDesktops, autoHide) {
+        slotConfig[cls] = {
+            idx: i, widthPct: wPct, heightPct: hPct, screenTarget: sPct,
+            opacity: opc, allDesktops: allD, autoHide: aHide
+        };
+
+        (function (windowClass, shortcut) {
             registerShortcut(
                 "DropdownAny-" + windowClass,
                 "Dropdown toggle: " + windowClass,
                 shortcut,
-                function () {
-                    toggleWindow(windowClass, shortcut, widthPct, heightPct, screenTarget,
-                                 opacity, allDesktops, autoHide);
-                }
+                function () { toggleWindow(windowClass, shortcut); }
             );
 
-            if (autoHide === true) {
+            if (slotConfig[windowClass].autoHide === true) {
                 workspace.windowActivated.connect(function (activeWin) {
                     // Already parked off-screen — don't re-hide.
                     if (hiddenWindows[windowClass] !== undefined) return;
@@ -215,7 +255,7 @@
                     hideWindow(windowClass);
                 });
             }
-        })(cls, sc, wPct, hPct, sPct, opc, allD, aHide);
+        })(cls, sc);
 
         registered++;
     }
@@ -258,6 +298,16 @@
         "Meta+Shift+W",
         listWindowClasses
     );
+
+    // ── Resize shortcuts ──────────────────────────────────────────────────────
+    registerShortcut("DropdownAny-ResizeHeightInc", "Dropdown: Increase height", "Alt+Shift+Up",
+        function () { resizeActive(0,  RESIZE_STEP); });
+    registerShortcut("DropdownAny-ResizeHeightDec", "Dropdown: Decrease height", "Alt+Shift+Down",
+        function () { resizeActive(0, -RESIZE_STEP); });
+    registerShortcut("DropdownAny-ResizeWidthInc",  "Dropdown: Increase width",  "Alt+Shift+Right",
+        function () { resizeActive( RESIZE_STEP, 0); });
+    registerShortcut("DropdownAny-ResizeWidthDec",  "Dropdown: Decrease width",  "Alt+Shift+Left",
+        function () { resizeActive(-RESIZE_STEP, 0); });
 
     console.log("[DropdownAny] loaded — " + registered + "/10 slots active.");
 })();
