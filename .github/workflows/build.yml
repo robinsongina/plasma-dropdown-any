@@ -48,12 +48,16 @@ jobs:
     runs-on: ubuntu-latest
     container: ubuntu:24.04
     steps:
-      - name: Enable universe and install dependencies
+      - name: Enable repos and install dependencies
         run: |
           apt-get update
-          apt-get install -y software-properties-common
+          apt-get install -y software-properties-common gpg-agent
           add-apt-repository -y universe
+          add-apt-repository -y ppa:kubuntu-ppa/ppa
           apt-get update
+          echo "=== KF6 packages available ==="
+          apt-cache search kf6 | grep -E '(kcm|kconfig|coreaddons)' | sort
+          echo "=============================="
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             cmake extra-cmake-modules g++ \
             qt6-base-dev qt6-declarative-dev \
