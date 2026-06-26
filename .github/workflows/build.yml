@@ -1,72 +1,50 @@
-name: Build KCM
+name: Validate
 
 on:
   push:
     branches: [master]
     paths:
-      - 'kcm/**'
+      - 'plasmoid/**'
+      - 'install.sh'
+      - 'uninstall.sh'
       - '.github/workflows/build.yml'
   pull_request:
     paths:
-      - 'kcm/**'
+      - 'plasmoid/**'
+      - 'install.sh'
+      - 'uninstall.sh'
+      - '.github/workflows/build.yml'
 
 jobs:
-  build-arch:
-    name: Arch Linux
+  validate:
+    name: shellcheck + JSON + qmllint
     runs-on: ubuntu-latest
-    container: archlinux:latest
     steps:
-      - name: Install dependencies
-        run: pacman -Syu --noconfirm cmake extra-cmake-modules gcc make qt6-base qt6-declarative kcmutils kconfig kcoreaddons
-
       - uses: actions/checkout@v4
 
-      - name: Configure
-        run: cmake -S kcm -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --parallel
-
-  build-fedora:
-    name: Fedora 41
-    runs-on: ubuntu-latest
-    container: fedora:41
-    steps:
-      - name: Install dependencies
-        run: dnf install -y cmake extra-cmake-modules gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kcmutils-devel kf6-kconfig-devel kf6-kcoreaddons-devel
-
-      - uses: actions/checkout@v4
-
-      - name: Configure
-        run: cmake -S kcm -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --parallel
-
-  build-ubuntu:
-    name: Ubuntu 24.04
-    runs-on: ubuntu-latest
-    container: ubuntu:24.04
-    steps:
-      - name: Enable repos and install dependencies
+      - name: Install tools
         run: |
-          apt-get update
-          apt-get install -y software-properties-common gpg-agent
-          add-apt-repository -y universe
-          add-apt-repository -y ppa:kubuntu-ppa/ppa
-          apt-get update
-          echo "=== KF6 packages available ==="
-          apt-cache search kf6 | grep -E '(kcm|kconfig|coreaddons)' | sort
-          echo "=============================="
-          DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            cmake extra-cmake-modules g++ \
-            qt6-base-dev qt6-declarative-dev \
-            libkf6kcmutils-dev libkf6config-dev libkf6coreaddons-dev
+          sudo apt-get update -q
+          sudo apt-get install -y shellcheck qml6-l10n
 
-      - uses: actions/checkout@v4
+      - name: shellcheck — config-helper.sh
+        run: shellcheck plasmoid/contents/code/config-helper.sh
 
-      - name: Configure
-        run: cmake -S kcm -B build -DCMAKE_BUILD_TYPE=Release
+      - name: shellcheck — install.sh
+        run: shellcheck install.sh
 
-      - name: Build
-        run: cmake --build build --parallel
+      - name: shellcheck — uninstall.sh
+        run: shellcheck uninstall.sh
+
+      - name: Validate metadata.json
+        run: python3 -c "import json, sys; json.load(open('plasmoid/metadata.json')) or sys.exit(0); print('metadata.json: OK')"
+
+      - name: qmllint — QML files (best-effort)
+        run: |
+          if command -v qmllint6 >/dev/null 2>&1; then
+            find plasmoid/contents/ui -name '*.qml' -exec qmllint6 {} \;
+          elif command -v qmllint >/dev/null 2>&1; then
+            find plasmoid/contents/ui -name '*.qml' -exec qmllint {} \;
+          else
+            echo "qmllint not available — skipping QML syntax check"
+          fi
