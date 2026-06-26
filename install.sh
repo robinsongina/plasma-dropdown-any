@@ -8,13 +8,21 @@ PLASMOID_HELPER="$HOME/.local/share/plasma/plasmoids/${PLASMOID_ID}/contents/cod
 
 echo "→ Installing KWin script: $SCRIPT_ID"
 
-# Install or upgrade KWin script
-if kpackagetool6 --type KWin/Script --install "$SCRIPT_DIR" 2>/dev/null; then
+# Stage only the KWin script files (metadata.json + contents/) in a temp dir.
+# Installing the full project root would copy plasmoid/ into the KWin package,
+# causing KPackage to find a Plasma/Applet metadata.json inside a KWin/Script
+# package and refuse to load the Configure button.
+TMP_KWIN=$(mktemp -d)
+cp "$SCRIPT_DIR/metadata.json" "$TMP_KWIN/"
+cp -r "$SCRIPT_DIR/contents"   "$TMP_KWIN/"
+
+if kpackagetool6 --type KWin/Script --install "$TMP_KWIN" 2>/dev/null; then
     echo "  Installed."
 else
     echo "  Already installed — upgrading."
-    kpackagetool6 --type KWin/Script --upgrade "$SCRIPT_DIR"
+    kpackagetool6 --type KWin/Script --upgrade "$TMP_KWIN"
 fi
+rm -rf "$TMP_KWIN"
 
 echo ""
 echo "→ Installing Plasma applet: $PLASMOID_ID"
