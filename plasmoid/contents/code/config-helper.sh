@@ -302,30 +302,32 @@ JSEOF
 
     # Unload any previous temp script, then load and run the new one
     "$dbus_cmd" org.kde.KWin /Scripting \
-        org.kde.kwin.Scripting.unloadScript dropdown-winlist-sh 2>/dev/null || true
+        org.kde.kwin.Scripting.unloadScript dropdown-winlist-sh >/dev/null 2>&1 || true
     local script_id=""
     script_id=$("$dbus_cmd" org.kde.KWin /Scripting \
         org.kde.kwin.Scripting.loadScript "$tmp_js" dropdown-winlist-sh 2>/dev/null || true)
 
     if [[ -n "$script_id" && "$script_id" =~ ^[0-9]+$ ]]; then
         "$dbus_cmd" org.kde.KWin "/Scripting/Script${script_id}" \
-            org.kde.kwin.Script.run 2>/dev/null || true
+            org.kde.kwin.Script.run >/dev/null 2>&1 || true
         sleep 1.2
     fi
 
-    # Collect tagged output from the journal
+    # Collect tagged output from the journal.
+    # --output=cat strips the date/host/pid prefix so tabs are preserved exactly
+    # as KWin's print() emitted them.
     local raw_output=""
     if [[ -n "$cursor" ]]; then
-        raw_output=$(journalctl --user "--after-cursor=${cursor}" 2>/dev/null | \
-                     grep -oP "${tag}\t[^\n]+" || true)
+        raw_output=$(journalctl --user --output=cat "--after-cursor=${cursor}" 2>/dev/null | \
+                     grep -P "^${tag}\t" || true)
     else
-        raw_output=$(journalctl --user -n 500 2>/dev/null | \
-                     grep -oP "${tag}\t[^\n]+" || true)
+        raw_output=$(journalctl --user --output=cat -n 500 2>/dev/null | \
+                     grep -P "^${tag}\t" || true)
     fi
 
     # Cleanup: unload temp script and remove JS file
     "$dbus_cmd" org.kde.KWin /Scripting \
-        org.kde.kwin.Scripting.unloadScript dropdown-winlist-sh 2>/dev/null || true
+        org.kde.kwin.Scripting.unloadScript dropdown-winlist-sh >/dev/null 2>&1 || true
     rm -f "$tmp_js"
 
     # Parse and output deduplicated results
@@ -387,7 +389,7 @@ cmd_reload_script() {
 
     # Unload current instance (ignore error; script may not be loaded)
     "$dbus_cmd" org.kde.KWin /Scripting \
-        org.kde.kwin.Scripting.unloadScript plasma-dropdown-any 2>/dev/null || true
+        org.kde.kwin.Scripting.unloadScript plasma-dropdown-any >/dev/null 2>&1 || true
 
     # Locate main.js in XDG data directories (matches QStandardPaths::locate)
     local main_js=""
@@ -420,7 +422,7 @@ cmd_reload_script() {
     fi
 
     "$dbus_cmd" org.kde.KWin "/Scripting/Script${script_id}" \
-        org.kde.kwin.Script.run 2>/dev/null || true
+        org.kde.kwin.Script.run >/dev/null 2>&1 || true
 }
 
 # ─── subcommand: check-tools ─────────────────────────────────────────────────────
