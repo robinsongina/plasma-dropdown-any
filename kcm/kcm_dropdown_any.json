@@ -1,7 +1,0 @@
-{
-    "KPlugin": {
-        "Description": "Configure Dropdown Any Window KWin script",
-        "Id": "kcm_dropdown_any",
-        "Name": "Dropdown Any Window"
-    }
-}

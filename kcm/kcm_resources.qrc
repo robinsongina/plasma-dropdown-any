@@ -1,5 +1,0 @@
-<RCC>
-  <qresource prefix="/kcm/plasma-dropdown-any">
-    <file alias="main.qml">ui/main.qml</file>
-  </qresource>
-</RCC>
