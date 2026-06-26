@@ -431,8 +431,14 @@ cmd_check_tools() {
     require_python3
     python3 << 'PYEOF'
 import shutil, json
-tools = ["kreadconfig6", "kwriteconfig6", "qdbus6", "kscreen-doctor"]
-print(json.dumps({t: shutil.which(t) is not None for t in tools}))
+result = {
+    "kreadconfig6":  shutil.which("kreadconfig6")  is not None,
+    "kwriteconfig6": shutil.which("kwriteconfig6") is not None,
+    "qdbus":         shutil.which("qdbus6") is not None or shutil.which("qdbus") is not None,
+    "kscreen-doctor": shutil.which("kscreen-doctor") is not None,
+    "python3":       True,
+}
+print(json.dumps(result))
 PYEOF
 }
 

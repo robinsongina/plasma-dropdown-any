@@ -16,6 +16,5 @@
     "X-Plasma-API": "javascript",
     "X-Plasma-API-Minimum-Version": "6.0",
     "X-Plasma-MainScript": "code/main.js",
-    "X-KDE-ConfigModule": "kwin/effects/configs/kcm_dropdown_any",
     "KPackageStructure": "KWin/Script"
 }
