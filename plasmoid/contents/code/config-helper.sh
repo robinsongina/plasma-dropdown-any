@@ -60,15 +60,27 @@ require_python3() {
 
 # Return the first available DBus command (qdbus6 preferred, qdbus fallback).
 # Exits 1 if neither is found.
+# Plasma5Support DataSource runs with a restricted PATH, so we also probe
+# common Qt6 installation directories explicitly.
 find_dbus_cmd() {
-    if command -v qdbus6 &>/dev/null; then
-        echo "qdbus6"
-    elif command -v qdbus &>/dev/null; then
-        echo "qdbus"
-    else
-        echo "ERROR: neither qdbus6 nor qdbus found on PATH" >&2
-        exit 1
-    fi
+    local _candidates=(
+        qdbus6 qdbus
+        /usr/bin/qdbus6 /usr/bin/qdbus
+        /usr/lib/qt6/bin/qdbus6
+        /usr/lib/x86_64-linux-gnu/qt6/bin/qdbus6
+        /usr/lib64/qt6/bin/qdbus6
+        /usr/local/lib/qt6/bin/qdbus6
+        /usr/lib/qt/bin/qdbus6
+    )
+    local _c
+    for _c in "${_candidates[@]}"; do
+        if command -v "$_c" &>/dev/null 2>&1 || [[ -x "$_c" ]]; then
+            echo "$_c"
+            return 0
+        fi
+    done
+    echo "ERROR: neither qdbus6 nor qdbus found on PATH or common Qt6 paths" >&2
+    exit 1
 }
 
 # ─── subcommand: load ────────────────────────────────────────────────────────────

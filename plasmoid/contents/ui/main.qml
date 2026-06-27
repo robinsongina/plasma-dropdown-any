@@ -1,26 +1,35 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import QtQuick
+import QtQuick.Layouts
 import org.kde.plasma.plasmoid
+import org.kde.kirigami as Kirigami
 
-/**
- * main.qml — Plasmoid entry point for org.kde.plasma.dropdownany
- *
- * Architecture choice: PlasmoidItem root (required for Plasma/Applet packages)
- * with fullRepresentation set to ConfigEditor.  preferredRepresentation is
- * also set to fullRepresentation so the config UI is shown immediately when
- * the applet is opened (no compact/icon intermediate step).
- *
- * The applet is a configuration-only tool; it has no panel icon or compact
- * view.  Users access it by adding it to the desktop or by invoking it
- * directly via kpackagetool6.
- */
 PlasmoidItem {
     id: root
 
-    // Always show the full editor; skip the compact/icon representation.
-    preferredRepresentation: fullRepresentation
+    // ── Compact representation — icon shown in panel ──────────────────────────
+    compactRepresentation: Item {
+        Kirigami.Icon {
+            anchors.centerIn: parent
+            width:  Math.min(parent.width, parent.height) * 0.8
+            height: width
+            source: "utilities-terminal"
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.expanded = !root.expanded
+        }
+    }
 
-    fullRepresentation: ConfigEditor {
-        anchors.fill: parent
+    // ── Full representation — popup shown on click ────────────────────────────
+    fullRepresentation: Item {
+        Layout.minimumWidth:  680
+        Layout.preferredWidth: 750
+        Layout.minimumHeight: 480
+        Layout.preferredHeight: 600
+
+        ConfigEditor {
+            anchors.fill: parent
+        }
     }
 }
