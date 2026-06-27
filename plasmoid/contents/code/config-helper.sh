@@ -64,8 +64,8 @@ require_python3() {
 # common Qt6 installation directories explicitly.
 find_dbus_cmd() {
     local _candidates=(
-        qdbus6 qdbus
-        /usr/bin/qdbus6 /usr/bin/qdbus
+        qdbus6 qdbus-qt6 qdbus
+        /usr/bin/qdbus6 /usr/bin/qdbus-qt6 /usr/bin/qdbus
         /usr/lib/qt6/bin/qdbus6
         /usr/lib/x86_64-linux-gnu/qt6/bin/qdbus6
         /usr/lib64/qt6/bin/qdbus6
@@ -448,7 +448,7 @@ import shutil, json
 result = {
     "kreadconfig6":  shutil.which("kreadconfig6")  is not None,
     "kwriteconfig6": shutil.which("kwriteconfig6") is not None,
-    "qdbus":         shutil.which("qdbus6") is not None or shutil.which("qdbus") is not None,
+    "qdbus":         any(shutil.which(b) for b in ("qdbus6", "qdbus-qt6", "qdbus")),
     "kscreen-doctor": shutil.which("kscreen-doctor") is not None,
     "python3":       True,
 }
