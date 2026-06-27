@@ -87,12 +87,8 @@ Item {
     // ── Toggle (called by ShortcutHandler) ────────────────────────────────────
 
     function dbg(msg) {
-        console.log("[DropdownAny] " + msg)
         if (!slot.debugMode) return
-        callDBus("org.kde.plasmashell", "/org/kde/osdService",
-                 "org.kde.osdService", "showText",
-                 "utilities-terminal",
-                 "[DropdownAny]\n" + msg)
+        console.log("[DropdownAny] " + slot.windowClass + " — " + msg)
     }
 
     function toggle() {

@@ -134,9 +134,6 @@ Item {
         lines.sort()
         var text = lines.length > 0 ? lines.join("\n") : "(no windows found)"
         console.log("[DropdownAny] Windows:\n" + text)
-        callDBus("org.kde.plasmashell", "/org/kde/osdService",
-                 "org.kde.osdService", "showText",
-                 "dialog-information", text)
     }
 
     // ── Live config reload ────────────────────────────────────────────────────
