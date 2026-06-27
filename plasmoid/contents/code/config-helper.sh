@@ -385,42 +385,13 @@ cmd_reload_script() {
     local dbus_cmd=""
     dbus_cmd=$(find_dbus_cmd)
 
-    # Unload current instance (ignore error; script may not be loaded)
-    "$dbus_cmd" org.kde.KWin /Scripting \
-        org.kde.kwin.Scripting.unloadScript plasma-dropdown-any >/dev/null 2>&1 || true
-
-    # Locate main.js in XDG data directories (matches QStandardPaths::locate)
-    local main_js=""
-    local search_dirs=(
-        "$HOME/.local/share/kwin/scripts/plasma-dropdown-any/contents/code"
-        "/usr/share/kwin/scripts/plasma-dropdown-any/contents/code"
-        "/usr/local/share/kwin/scripts/plasma-dropdown-any/contents/code"
-    )
-    local dir
-    for dir in "${search_dirs[@]}"; do
-        if [[ -f "${dir}/main.js" ]]; then
-            main_js="${dir}/main.js"
-            break
-        fi
-    done
-
-    if [[ -z "$main_js" ]]; then
-        echo "ERROR: could not locate plasma-dropdown-any main.js in XDG data dirs" >&2
+    # /KWin reconfigure is the same action System Settings triggers when you
+    # toggle a script — it causes KWin to re-read kwinrc and reload all enabled
+    # scripts, picking up the new slot config immediately.
+    "$dbus_cmd" org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || {
+        echo "ERROR: KWin reconfigure failed" >&2
         exit 2
-    fi
-
-    # Load and run — get the script ID from loadScript return value
-    local script_id=""
-    script_id=$("$dbus_cmd" org.kde.KWin /Scripting \
-        org.kde.kwin.Scripting.loadScript "$main_js" plasma-dropdown-any 2>&1 || true)
-
-    if [[ -z "$script_id" || ! "$script_id" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: loadScript returned unexpected value: ${script_id}" >&2
-        exit 2
-    fi
-
-    "$dbus_cmd" org.kde.KWin "/Scripting/Script${script_id}" \
-        org.kde.kwin.Script.run >/dev/null 2>&1 || true
+    }
 }
 
 # ─── subcommand: check-tools ─────────────────────────────────────────────────────
