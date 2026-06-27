@@ -142,21 +142,18 @@ Item {
             _showStatus(qsTr("Save failed: %1").arg(stderr || "unknown error"), true)
             return
         }
-        // Save succeeded — chain the reload step
-        bridge.run("reload-script")
+        // Save succeeded — notify user to manually reload the script
+        _saving = false
+        dirty = false
+        _showStatus(
+            qsTr("Config saved. To apply: System Settings → KWin Scripts → disable and re-enable \"Dropdown Any Window\"."),
+            false
+        )
     }
 
     function _onReload(exitCode, stderr) {
+        // No longer used — kept for compatibility with ExecBridge signal routing
         _saving = false
-        if (exitCode !== 0) {
-            _showStatus(
-                qsTr("Config saved but script reload failed: %1").arg(stderr || "unknown error"),
-                true
-            )
-        } else {
-            dirty = false
-            _showStatus(qsTr("Configuration saved and script reloaded."), false)
-        }
     }
 
     function _showStatus(msg, isError) {
