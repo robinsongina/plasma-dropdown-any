@@ -53,5 +53,10 @@ else
 fi
 
 echo ""
-echo "Done. Add plasma-dropdown-any to a panel or desktop as a widget"
-echo "to configure your dropdown window entries."
+echo "Done."
+echo ""
+echo "To configure your dropdown slots, run:"
+echo "  plasmawindowed org.kde.plasma.dropdownany"
+echo ""
+echo "Or use the included shortcut:"
+echo "  bash configure"

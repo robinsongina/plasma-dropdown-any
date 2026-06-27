@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Opens the Dropdown Any configuration window.
+plasmawindowed org.kde.plasma.dropdownany
