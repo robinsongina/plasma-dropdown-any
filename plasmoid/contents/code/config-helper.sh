@@ -278,14 +278,7 @@ PYEOF
 
 cmd_list_windows() {
     local dbus_cmd=""
-    if command -v qdbus6 &>/dev/null; then
-        dbus_cmd="qdbus6"
-    elif command -v qdbus &>/dev/null; then
-        dbus_cmd="qdbus"
-    else
-        echo "ERROR: neither qdbus6 nor qdbus found on PATH" >&2
-        exit 1
-    fi
+    dbus_cmd=$(find_dbus_cmd)
 
     local tag="DROPWIN_$$"
     local tmp_js="/tmp/dropdown-winlist-$$.js"
@@ -390,14 +383,7 @@ cmd_list_screens() {
 
 cmd_reload_script() {
     local dbus_cmd=""
-    if command -v qdbus6 &>/dev/null; then
-        dbus_cmd="qdbus6"
-    elif command -v qdbus &>/dev/null; then
-        dbus_cmd="qdbus"
-    else
-        echo "ERROR: neither qdbus6 nor qdbus found on PATH" >&2
-        exit 1
-    fi
+    dbus_cmd=$(find_dbus_cmd)
 
     # Unload current instance (ignore error; script may not be loaded)
     "$dbus_cmd" org.kde.KWin /Scripting \
