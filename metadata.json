@@ -13,8 +13,7 @@
         "Version": "1.0.0",
         "Website": ""
     },
-    "X-Plasma-API": "javascript",
+    "X-Plasma-API": "declarativescript",
     "X-Plasma-API-Minimum-Version": "6.0",
-    "X-Plasma-MainScript": "code/main.js",
     "KPackageStructure": "KWin/Script"
 }
