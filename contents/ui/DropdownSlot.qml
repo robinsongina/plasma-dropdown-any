@@ -13,6 +13,7 @@ Item {
     required property string shortcutKey
     required property real   widthPercent
     required property real   heightPercent
+    required property bool   debugMode
     required property int    screenTarget
     required property real   windowOpacity   // 0.0–1.0
     required property bool   allDesktops
@@ -85,14 +86,25 @@ Item {
 
     // ── Toggle (called by ShortcutHandler) ────────────────────────────────────
 
+    function dbg(msg) {
+        console.log("[DropdownAny] " + msg)
+        if (!slot.debugMode) return
+        callDBus("org.kde.plasmashell", "/org/kde/osdService",
+                 "org.kde.osdService", "showText",
+                 "utilities-terminal",
+                 "[DropdownAny]\n" + msg)
+    }
+
     function toggle() {
         var win = findWindow()
         if (!win) {
-            console.log("[DropdownAny] No window for class:", slot.windowClass)
+            dbg(slot.windowClass + "\nWindow not found")
             return
         }
         slot.managedWindow = win
-        slot.state = (slot.state === "Visible") ? "Hidden" : "Visible"
+        var action = (slot.state === "Visible") ? "Hidden" : "Visible"
+        dbg(slot.windowClass + "\nAction: " + (action === "Visible" ? "show" : "hide"))
+        slot.state = action
     }
 
     // ── Live resize (called by main.qml's global shortcuts) ───────────────────
@@ -111,9 +123,8 @@ Item {
         KWin.writeConfig("widthPercent"  + slot.slotIndex, Math.round(slot.effectiveWidth  * 100))
         KWin.writeConfig("heightPercent" + slot.slotIndex, Math.round(slot.effectiveHeight * 100))
 
-        console.log("[DropdownAny] Resize", slot.windowClass,
-                    "→ w:" + Math.round(slot.effectiveWidth * 100) + "%",
-                    "h:" + Math.round(slot.effectiveHeight * 100) + "%")
+        dbg(slot.windowClass + "\nResize → w:" + Math.round(slot.effectiveWidth * 100) +
+            "% h:" + Math.round(slot.effectiveHeight * 100) + "%")
     }
 
     // ── State machine ─────────────────────────────────────────────────────────

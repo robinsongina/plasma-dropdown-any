@@ -295,11 +295,16 @@ cmd_list_windows() {
     local tmp_js="/tmp/dropdown-winlist-$$.js"
 
     # Write temp KWin script; ${tag} is expanded by bash here
+    # KWin 6: workspace.windows (list property)
+    # KWin 5 compat: workspace.windowList() / workspace.clientList()
     cat > "$tmp_js" << JSEOF
 (function() {
   var seen = {};
   var skip = { plasmashell: 1, systemsettings: 1, ksmserver: 1 };
-  var wins = workspace.windowList();
+  var wins = (typeof workspace.windows !== 'undefined') ? workspace.windows
+             : (typeof workspace.windowList === 'function') ? workspace.windowList()
+             : (typeof workspace.clientList === 'function') ? workspace.clientList()
+             : [];
   for (var i = 0; i < wins.length; i++) {
     var w   = wins[i];
     var cls = String(w.resourceClass || '');

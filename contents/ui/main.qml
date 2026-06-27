@@ -10,6 +10,7 @@ Item {
     property var  slotData:     []
     property int  animDuration: 250
     property bool animEnabled:  true
+    property bool debugMode:    false
 
     // ── Config loading ────────────────────────────────────────────────────────
 
@@ -37,6 +38,8 @@ Item {
             })
         }
 
+        root.debugMode    = KWin.readConfig("debugMode",    false) !== false &&
+                            KWin.readConfig("debugMode",    false) !== "false"
         root.animEnabled  = KWin.readConfig("animEnabled",  true) !== false &&
                             KWin.readConfig("animEnabled",  true) !== "false"
         root.animDuration = parseInt(KWin.readConfig("animDuration", 250), 10)
@@ -64,6 +67,7 @@ Item {
             allDesktops:  modelData.allDesktops
             autoHide:     modelData.autoHide
             animDuration: root.animEnabled ? root.animDuration : 0
+            debugMode:    root.debugMode
         }
     }
 
@@ -128,7 +132,11 @@ Item {
             lines.push(cls + " → " + title)
         }
         lines.sort()
-        console.log("[DropdownAny] Windows:\n" + lines.join("\n"))
+        var text = lines.length > 0 ? lines.join("\n") : "(no windows found)"
+        console.log("[DropdownAny] Windows:\n" + text)
+        callDBus("org.kde.plasmashell", "/org/kde/osdService",
+                 "org.kde.osdService", "showText",
+                 "dialog-information", text)
     }
 
     // ── Live config reload ────────────────────────────────────────────────────
