@@ -35,6 +35,8 @@ Item {
 
     // ── state ─────────────────────────────────────────────────────────────────
     property bool debugMode:      false
+    property bool animEnabled:    true
+    property int  animDuration:   250
     property bool dirty:          false
     property bool _saving:        false
     property bool _loadingWindows: false
@@ -80,7 +82,9 @@ Item {
         }
         try {
             var data = JSON.parse(stdout)
-            debugMode = data.debugMode || false
+            debugMode    = data.debugMode    || false
+            animEnabled  = data.animEnabled  !== undefined ? data.animEnabled  : true
+            animDuration = data.animDuration !== undefined ? data.animDuration : 250
             slotModel.clear()
             var slots = data.slots || []
             for (var i = 0; i < slots.length; i++) {
@@ -205,9 +209,11 @@ Item {
             })
         }
         return JSON.stringify({
-            slotCount: slots.length,
-            debugMode: debugMode,
-            slots:     slots
+            slotCount:    slots.length,
+            debugMode:    debugMode,
+            animEnabled:  animEnabled,
+            animDuration: animDuration,
+            slots:        slots
         })
     }
 
@@ -608,6 +614,51 @@ Item {
                 wrapMode: Text.WordWrap
                 color: Kirigami.Theme.disabledTextColor
                 text: qsTr("After saving, the KWin script is reloaded automatically.\nShortcut format: F12 · Meta+F1 · Ctrl+F12")
+            }
+
+            // ── Animation ────────────────────────────────────────────────────
+            Kirigami.Card {
+                Layout.fillWidth: true
+
+                header: Kirigami.Heading {
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
+                    text: qsTr("Animation")
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Controls.CheckBox {
+                        id: animEnabledCheck
+                        text: qsTr("Enable slide animation")
+                        checked: root.animEnabled
+                        onToggled: {
+                            root.animEnabled = checked
+                            dirty = true
+                        }
+                    }
+
+                    RowLayout {
+                        enabled: animEnabledCheck.checked
+                        opacity: animEnabledCheck.checked ? 1.0 : 0.4
+
+                        Controls.Label {
+                            text: qsTr("Duration (ms):")
+                        }
+
+                        Controls.SpinBox {
+                            from:      50
+                            to:        5000
+                            stepSize:  50
+                            value:     root.animDuration
+                            onValueModified: {
+                                root.animDuration = value
+                                dirty = true
+                            }
+                        }
+                    }
+                }
             }
 
             // ── Developer options ─────────────────────────────────────────────

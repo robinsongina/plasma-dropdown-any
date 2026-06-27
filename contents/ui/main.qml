@@ -7,8 +7,9 @@ pragma ComponentBehavior: Bound
 Item {
     id: root
 
-    property var slotData: []
-    property int animDuration: 250
+    property var  slotData:     []
+    property int  animDuration: 250
+    property bool animEnabled:  true
 
     // ── Config loading ────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ Item {
             })
         }
 
+        root.animEnabled  = KWin.readConfig("animEnabled",  true) !== false &&
+                            KWin.readConfig("animEnabled",  true) !== "false"
         root.animDuration = parseInt(KWin.readConfig("animDuration", 250), 10)
         root.slotData     = cfg
         console.log("[DropdownAny] loadConfig —", cfg.length, "slots,",
@@ -60,7 +63,7 @@ Item {
             windowOpacity:modelData.windowOpacity
             allDesktops:  modelData.allDesktops
             autoHide:     modelData.autoHide
-            animDuration: root.animDuration
+            animDuration: root.animEnabled ? root.animDuration : 0
         }
     }
 

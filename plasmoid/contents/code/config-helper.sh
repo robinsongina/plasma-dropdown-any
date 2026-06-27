@@ -155,12 +155,16 @@ else:
             "autoHide":      kread(f"autoHide{n}",    "false") == "true",
         })
 
-debug_mode = kread("debugMode", "false") == "true"
+debug_mode   = kread("debugMode",    "false") == "true"
+anim_enabled = kread("animEnabled",  "true")  == "true"
+anim_duration= to_int(kread("animDuration", "250"), 250)
 
 print(json.dumps({
-    "slotCount": len(slots),
-    "debugMode":  debug_mode,
-    "slots":      slots
+    "slotCount":    len(slots),
+    "debugMode":    debug_mode,
+    "animEnabled":  anim_enabled,
+    "animDuration": anim_duration,
+    "slots":        slots
 }))
 PYEOF
 }
@@ -214,16 +218,23 @@ kwin_group = "${kwin_group}"
 with open("${json_file}") as f:
     data = json.load(f)
 
-slots      = data.get("slots", [])
-debug_mode = data.get("debugMode", False)
-count      = len(slots)
+slots         = data.get("slots", [])
+debug_mode    = data.get("debugMode",    False)
+anim_enabled  = data.get("animEnabled",  True)
+anim_duration = int(data.get("animDuration", 250))
+count         = len(slots)
 
-# Write slotCount and debugMode
+# Write global keys
 kwrite("--file", "kwinrc", "--group", kwin_group,
        "--key", "slotCount", str(count))
 kwrite("--file", "kwinrc", "--group", kwin_group,
        "--key", "debugMode", "--type", "bool",
        "true" if debug_mode else "false")
+kwrite("--file", "kwinrc", "--group", kwin_group,
+       "--key", "animEnabled", "--type", "bool",
+       "true" if anim_enabled else "false")
+kwrite("--file", "kwinrc", "--group", kwin_group,
+       "--key", "animDuration", str(max(0, min(5000, anim_duration))))
 
 # Write each slot; also write shortcuts for non-empty cls+sc pairs
 for i, slot in enumerate(slots, 1):
