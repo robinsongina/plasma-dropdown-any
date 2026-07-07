@@ -67,7 +67,7 @@ Item {
     // ── bridge dispatch ───────────────────────────────────────────────────────
     function _dispatch(verb, exitCode, stdout, stderr) {
         if      (verb === "load")          _onLoad(exitCode, stdout, stderr)
-        else if (verb === "list-windows")  _onListWindows(exitCode, stdout)
+        else if (verb === "list-windows")  _onListWindows(exitCode, stdout, stderr)
         else if (verb === "check-tools")   _onCheckTools(exitCode, stdout)
         else if (verb === "save")          _onSave(exitCode, stderr)
         else if (verb === "reload-script") _onReload(exitCode, stderr)
@@ -102,7 +102,7 @@ Item {
         }
     }
 
-    function _onListWindows(exitCode, stdout) {
+    function _onListWindows(exitCode, stdout, stderr) {
         _loadingWindows = false
         windowClassModel.clear()
         if (exitCode !== 0 || stdout.length === 0) return
@@ -114,6 +114,16 @@ Item {
             var cls   = sep >= 0 ? line.substring(0, sep).trim() : line
             var title = sep >= 0 ? line.substring(sep + 3).trim() : ""
             if (cls) windowClassModel.append({ cls: cls, title: title })
+        }
+        // Some KWin builds don't route script print() output to the user
+        // journal (see config-helper.sh cmd_list_windows comment) — when
+        // that happens the helper falls back to an OSD popup + Klipper
+        // clipboard round-trip, and flags it via this stderr marker.
+        if (stderr && stderr.indexOf("FALLBACK_CLIPBOARD_OSD") >= 0) {
+            _showStatus(
+                qsTr("Window list detected via clipboard fallback (check the on-screen popup) — your clipboard was overwritten."),
+                false
+            )
         }
     }
 
