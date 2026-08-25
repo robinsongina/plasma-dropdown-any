@@ -294,24 +294,24 @@ PYEOF
 #
 # Output: one "class → title" line per unique window class (sorted).
 
-# Re-scans open windows and pushes the tagged list out via callDBus instead
+# Re-scans open windows and pushes the class list out via callDBus instead
 # of print()+journal: shows an OSD (org.kde.osdService) so the user sees
-# something happened, and writes the same tagged text to the clipboard via
+# something happened, and writes the same class list to the clipboard via
 # Klipper so this shell script can read it back over DBus. The user's
 # previous clipboard content is saved before the overwrite and restored
-# once the tagged text has been read back, so this is transparent.
-# Echoes the tagged raw lines (same "${tag}\tcls\ttitle" format the journal
-# path produces) on stdout, or nothing if the clipboard round-trip failed.
+# once the class list has been read back, so this is transparent.
+# Echoes one window class per line (no title — the clipboard channel only
+# carries class names) on stdout, or nothing if the clipboard round-trip
+# failed.
 _list_windows_fallback_via_clipboard() {
   local dbus_cmd="$1"
-  local tag="$2"
   local tmp_js="/tmp/dropdown-winlist-fallback-$$.js"
 
   local prev_clipboard=""
   prev_clipboard=$("$dbus_cmd" org.kde.klipper /klipper org.kde.klipper.klipper \
     getClipboardContents 2>/dev/null || true)
 
-  cat >"$tmp_js" <<JSEOF
+  cat >"$tmp_js" <<'JSEOF'
 (function() {
   var seen = {};
   var skip = { plasmashell: 1, systemsettings: 1, ksmserver: 1, plasmawindowed: 1 };
@@ -319,22 +319,19 @@ _list_windows_fallback_via_clipboard() {
              : (typeof workspace.windowList === 'function') ? workspace.windowList()
              : (typeof workspace.clientList === 'function') ? workspace.clientList()
              : [];
-  var tagged = [];
-  var osd    = [];
+  var classes = [];
   for (var i = 0; i < wins.length; i++) {
     var w   = wins[i];
     var cls = String(w.resourceClass || '');
     if (!cls || skip[cls] || seen[cls]) continue;
     seen[cls] = 1;
-    var cap = String(w.caption || '').substring(0, 60);
-    tagged.push('${tag}\t' + cls + '\t' + cap);
-    osd.push(cls);
+    classes.push(cls);
   }
   callDBus('org.kde.plasmashell', '/org/kde/osdService', 'org.kde.osdService',
            'showText', 'dialog-information',
-           osd.length > 0 ? osd.join('\n') : '(no windows found)');
+           classes.length > 0 ? classes.join('\n') : '(no windows found)');
   callDBus('org.kde.klipper', '/klipper', 'org.kde.klipper.klipper',
-           'setClipboardContents', tagged.join('\n'));
+           'setClipboardContents', classes.join('\n'));
 })();
 JSEOF
 
@@ -430,11 +427,16 @@ JSEOF
   rm -f "$tmp_js"
 
   # Journal produced nothing — fall back to OSD + Klipper (see comment above).
+  # This channel carries plain class names only (no tag, no title), so it's
+  # handled separately from the tag\tcls\ttitle journal format below.
   if [[ -z "$raw_output" ]]; then
-    raw_output=$(_list_windows_fallback_via_clipboard "$dbus_cmd" "$tag")
-    if [[ -n "$raw_output" ]]; then
+    local clip_result=""
+    clip_result=$(_list_windows_fallback_via_clipboard "$dbus_cmd")
+    if [[ -n "$clip_result" ]]; then
       echo "FALLBACK_CLIPBOARD_OSD" >&2
+      printf '%s\n' "$clip_result" | sort -u
     fi
+    return 0
   fi
 
   # Parse and output deduplicated results
