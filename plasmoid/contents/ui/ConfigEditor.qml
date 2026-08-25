@@ -118,10 +118,11 @@ Item {
         // Some KWin builds don't route script print() output to the user
         // journal (see config-helper.sh cmd_list_windows comment) — when
         // that happens the helper falls back to an OSD popup + Klipper
-        // clipboard round-trip, and flags it via this stderr marker.
+        // clipboard round-trip (restoring the previous clipboard contents
+        // afterward), and flags it via this stderr marker.
         if (stderr && stderr.indexOf("FALLBACK_CLIPBOARD_OSD") >= 0) {
             _showStatus(
-                qsTr("Window list detected via clipboard fallback (check the on-screen popup) — your clipboard was overwritten."),
+                qsTr("Window list detected via clipboard fallback (your clipboard was used briefly and restored)."),
                 false
             )
         }

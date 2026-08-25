@@ -297,7 +297,9 @@ PYEOF
 # Re-scans open windows and pushes the tagged list out via callDBus instead
 # of print()+journal: shows an OSD (org.kde.osdService) so the user sees
 # something happened, and writes the same tagged text to the clipboard via
-# Klipper so this shell script can read it back over DBus.
+# Klipper so this shell script can read it back over DBus. The user's
+# previous clipboard content is saved before the overwrite and restored
+# once the tagged text has been read back, so this is transparent.
 # Echoes the tagged raw lines (same "${tag}\tcls\ttitle" format the journal
 # path produces) on stdout, or nothing if the clipboard round-trip failed.
 _list_windows_fallback_via_clipboard() {
@@ -305,10 +307,14 @@ _list_windows_fallback_via_clipboard() {
   local tag="$2"
   local tmp_js="/tmp/dropdown-winlist-fallback-$$.js"
 
+  local prev_clipboard=""
+  prev_clipboard=$("$dbus_cmd" org.kde.klipper /klipper org.kde.klipper.klipper \
+    getClipboardContents 2>/dev/null || true)
+
   cat >"$tmp_js" <<JSEOF
 (function() {
   var seen = {};
-  var skip = { plasmashell: 1, systemsettings: 1, ksmserver: 1 };
+  var skip = { plasmashell: 1, systemsettings: 1, ksmserver: 1, plasmawindowed: 1 };
   var wins = (typeof workspace.windows !== 'undefined') ? workspace.windows
              : (typeof workspace.windowList === 'function') ? workspace.windowList()
              : (typeof workspace.clientList === 'function') ? workspace.clientList()
@@ -348,8 +354,14 @@ JSEOF
     org.kde.kwin.Scripting.unloadScript dropdown-winlist-fb >/dev/null 2>&1 || true
   rm -f "$tmp_js"
 
+  local result=""
+  result=$("$dbus_cmd" org.kde.klipper /klipper org.kde.klipper.klipper \
+    getClipboardContents 2>/dev/null || true)
+
   "$dbus_cmd" org.kde.klipper /klipper org.kde.klipper.klipper \
-    getClipboardContents 2>/dev/null || true
+    setClipboardContents "$prev_clipboard" >/dev/null 2>&1 || true
+
+  printf '%s' "$result"
 }
 
 cmd_list_windows() {
@@ -366,7 +378,7 @@ cmd_list_windows() {
   cat >"$tmp_js" <<JSEOF
 (function() {
   var seen = {};
-  var skip = { plasmashell: 1, systemsettings: 1, ksmserver: 1 };
+  var skip = { plasmashell: 1, systemsettings: 1, ksmserver: 1, plasmawindowed: 1 };
   var wins = (typeof workspace.windows !== 'undefined') ? workspace.windows
              : (typeof workspace.windowList === 'function') ? workspace.windowList()
              : (typeof workspace.clientList === 'function') ? workspace.clientList()
