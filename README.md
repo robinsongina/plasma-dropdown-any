@@ -8,40 +8,18 @@ Works with **any application** identified by its `resourceClass` (Konsole, Kitty
 
 ## Dependencies
 
+No build step, no compiler, no `-dev`/`-devel` packages. The KWin script is plain JavaScript and the settings UI is a QML Plasma widget — everything below ships with any stock Plasma 6 desktop.
+
 ### Runtime
 
 | Dependency | Notes |
 |-----------|-------|
 | **Plasma 6 / KWin 6** | Required — the script runs inside the KWin scripting engine |
-| **kpackagetool6** | Required — used by `install.sh` to register the script package |
-| **qdbus6** | Required — used by `install.sh` to reload KWin after install |
-
-### Build (KCM configuration module)
-
-The KCM is a C++ plugin that must be compiled before installing. You need:
-
-| Dependency | Min version | Arch package | Fedora package |
-|-----------|------------|--------------|----------------|
-| CMake | 3.20 | `cmake` | `cmake` |
-| Extra CMake Modules | 6.0 | `extra-cmake-modules` | `extra-cmake-modules` |
-| GCC or Clang | C++17 | `gcc` | `gcc` |
-| Qt6 (Core, Quick, DBus) | 6.x | `qt6-base` `qt6-declarative` | `qt6-qtbase-devel` `qt6-qtdeclarative-devel` |
-| KF6 KCMUtils | 6.x | `kcmutils` | `kf6-kcmutils-devel` |
-| KF6 Config | 6.x | `kconfig` | `kf6-kconfig-devel` |
-| KF6 CoreAddons | 6.x | `kcoreaddons` | `kf6-kcoreaddons-devel` |
-
-**Arch / CachyOS / Manjaro:**
-```bash
-sudo pacman -S cmake extra-cmake-modules gcc qt6-base qt6-declarative \
-               kcmutils kconfig kcoreaddons
-```
-
-**Fedora:**
-```bash
-sudo dnf install cmake extra-cmake-modules gcc-c++ \
-                 qt6-qtbase-devel qt6-qtdeclarative-devel \
-                 kf6-kcmutils-devel kf6-kconfig-devel kf6-kcoreaddons-devel
-```
+| **kpackagetool6** | Required — installs both the KWin/Script and Plasma/Applet packages |
+| **qdbus6** (or `qdbus-qt6` / `qdbus`) | Required — used to reload KWin and to drive the widget's window-list detection. `install.sh`/`config-helper.sh` probe all three names, so any one is enough |
+| **kreadconfig6** / **kwriteconfig6** | Required — the widget reads/writes `kwinrc` through these instead of a compiled config backend |
+| **python3** | Required — used internally by `config-helper.sh` for JSON (de)serialization between the widget and `kwinrc` |
+| **kscreen-doctor** | Optional — used to list screen names in the widget; without it, only "At cursor screen" is offered |
 
 ### Optional
 
@@ -69,11 +47,18 @@ cd plasma-dropdown-any
 bash install.sh
 ```
 
-Then **log out and log back in** so the KCM plugin path is picked up by Plasma. After that:
+`install.sh` installs the KWin script and the Plasma widget via `kpackagetool6`, enables the script in `kwinrc`, and reloads KWin — no logout required for the script itself.
 
-**System Settings → Window Management → KWin Scripts → plasma-dropdown-any → Configure**
+Then open the settings window:
 
-> If the **Configure** button doesn't appear after logging back in, make sure all build dependencies were installed before running `install.sh`. Missing KF6 packages cause the KCM to silently skip compilation.
+```bash
+bash configure
+# equivalent to: plasmawindowed org.kde.plasma.dropdownany
+```
+
+You can also add **Dropdown Any** as a panel widget from the usual "Add Widgets" picker if you'd rather keep it pinned somewhere.
+
+> After **Apply**, KWin doesn't pick up the new slot config automatically. The widget will tell you to disable and re-enable the script from **System Settings → KWin Scripts → "Dropdown Any Window"** — that one step still needs to be manual.
 
 ---
 
@@ -111,9 +96,13 @@ The shortcuts only do anything when the active window is a managed dropdown. If 
 
 ### Finding a window's resource class
 
-With the script active, press **`Meta+Shift+W`**. An OSD lists all open windows and their resource classes (e.g. `obsidian · sublime_text · vivaldi-stable`).
+The settings window's "Window class" field is a dropdown auto-populated with every currently open window — pick one instead of typing it by hand. It refreshes on open, or with the refresh button next to it.
 
-The shortcut is configurable in System Settings → Shortcuts → KWin → *"Dropdown Any: List active window classes"*.
+Independently of the widget, you can also press **`Meta+Shift+W`** anywhere to get an OSD listing all open windows and their resource classes (e.g. `obsidian · sublime_text · vivaldi-stable`). The shortcut is configurable in System Settings → Shortcuts → KWin → *"Dropdown Any: List active window classes"*.
+
+> On some KWin builds, the widget's window-list detection can't read the script output back through the systemd journal (observed on Fedora — harmless, still unresolved upstream). When that happens it falls back to an on-screen popup plus a brief, automatically-restored use of your clipboard, and the widget shows a status message saying so. The "Window class" field stays fully usable either way — worst case, type the class in by hand.
+
+If the field comes up empty and typing manually isn't convenient, run the same shortcut above (**`Meta+Shift+W`**) to read the class off the OSD.
 
 ### Manual config via terminal
 
@@ -149,15 +138,18 @@ Config changes (screen, size, opacity) take effect on the next **show**. No relo
 
 ```
 plasma-dropdown-any/
-├── metadata.json              # Plugin manifest (X-Plasma-API: javascript)
+├── metadata.json                    # KWin/Script manifest (X-Plasma-API: javascript)
 ├── contents/
-│   └── code/main.js           # Core KWin script logic
-├── kcm/                       # System Settings configuration module (C++ + QML)
-│   ├── CMakeLists.txt
-│   ├── kcm_dropdown_any.h
-│   ├── kcm_dropdown_any.cpp
-│   └── ui/main.qml
-├── install.sh                 # Build KCM + install script + reload KWin
+│   └── code/main.js                 # Core KWin script logic (toggle, shortcuts, geometry)
+├── plasmoid/                        # Settings UI — Plasma/Applet package
+│   ├── metadata.json                # org.kde.plasma.dropdownany
+│   └── contents/
+│       ├── ui/main.qml              # PlasmoidItem entry point
+│       ├── ui/ConfigEditor.qml      # Slot list, fields, window-class picker
+│       ├── ui/ExecBridge.qml        # Plasma5Support subprocess wrapper
+│       └── code/config-helper.sh    # kwinrc/DBus bridge — no compiled backend
+├── configure                        # Shortcut: opens the settings window standalone
+├── install.sh                       # kpackagetool6 install (both packages) + reload KWin
 └── uninstall.sh
 ```
 
@@ -213,7 +205,9 @@ kwriteconfig6 --file kglobalshortcutsrc --group kwin \
 
 ```bash
 cat > /tmp/kwin_check.js << 'EOF'
-workspace.windowList().forEach(function(w) {
+var wins = (typeof workspace.windows !== 'undefined') ? workspace.windows
+           : workspace.windowList();  // pre-KWin-6 fallback
+wins.forEach(function(w) {
   if (w.resourceClass === "konsole") {
     var g = w.frameGeometry;
     console.log("[CHECK] geo=" + g.x.toFixed(0) + "," + g.y.toFixed(0) +
@@ -257,7 +251,11 @@ bash install.sh
 | Shortcut registered as `none` | The requested key was already taken by another app (e.g. F12 → Yakuake) | Use a different shortcut or set it manually in `kglobalshortcutsrc` |
 | `unloadScript` returns `false` | Script was not loaded (normal on first run) | Ignore, proceed with `start` |
 | Script does not reload with just `start` | KWin does not reload scripts already in memory | Always run `unloadScript` + `start` |
-| **Configure** button missing in System Settings | Missing `X-KDE-ConfigModule` in `metadata.json` | Add `"X-KDE-ConfigModule": "kwin/effects/configs/kcm_dropdown_any"` |
+| `workspace.windowList is not a function` | Renamed to `workspace.windows` (list property) in KWin 6 | `config-helper.sh` tries `workspace.windows` → `windowList()` → `clientList()` in that order |
+| `qdbus: command not found` from the widget | Plasma5Support's `executable` engine runs with a restricted `PATH`; some distros ship `qdbus-qt6` instead of `qdbus6` | `find_dbus_cmd()` probes `qdbus6`, `qdbus-qt6`, `qdbus`, and common Qt6 install paths |
+| Window-class dropdown stays empty, no error | The temp script's `print()` output never reaches `journalctl --user` on some KWin builds (seen on Fedora; SELinux, logging categories, and KWin version were all ruled out — root cause still unconfirmed) | Falls back to an OSD popup + a brief Klipper clipboard round-trip (restored after); type the class in manually as a last resort |
+| Settings window itself shows up as a toggle target | The widget's own process (`org.kde.plasmawindowed`) wasn't excluded from the window scan | Excluded in `config-helper.sh`'s skip list alongside `plasmashell`/`systemsettings`/`ksmserver` |
+| Config saved but nothing changes | KWin doesn't reload script config on `/KWin reconfigure` alone | Disable and re-enable the script in System Settings → KWin Scripts (the widget tells you this after every save) |
 
 ---
 
