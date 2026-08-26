@@ -134,6 +134,21 @@ Config changes (screen, size, opacity) take effect on the next **show**. No relo
 
 ---
 
+## App not running yet?
+
+The script only toggles windows that already exist — it can't launch an app for you. If the target window isn't found, the shortcut just does nothing (or shows "Window not found" in debug mode).
+
+This isn't a missing feature so much as a platform limitation: launching an arbitrary command requires a DBus call with a complex argument type (`systemd`'s `StartTransientUnit`, the standard way to spawn a managed process, needs a nested struct for `ExecStart`) that KWin's scripting `callDBus()` can't construct from plain JavaScript — only flat arguments (strings, numbers, string lists) marshal correctly. No simpler general-purpose "run this command" DBus method was found.
+
+**Workaround — autostart the app minimized.** Instead of launching on demand, have the app start automatically (and get out of the way) when your session begins, so it's already there the first time you press the shortcut:
+
+1. Add the app to **System Settings → Autostart** (or drop a `.desktop` file in `~/.config/autostart/`).
+2. If the app supports a "start minimized"/"start in tray" flag (many terminals, chat clients, and note apps do), enable it — otherwise the very first show will just look like a slide-in of an already-open window.
+
+This trades a bit of session startup cost and RAM for an instant, reliable toggle — no launch delay, no "press twice" step.
+
+---
+
 ## Project structure
 
 ```
