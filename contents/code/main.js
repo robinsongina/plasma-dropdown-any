@@ -57,42 +57,71 @@
     }
 
     // direction: "top" (default), "bottom", "left", or "right" — which screen
-    // edge the dropdown is anchored to. The perpendicular axis is centered
-    // (e.g. "left" centers vertically; "top" centers horizontally).
+    // edge a box of size w×h is anchored to within area. The perpendicular
+    // axis is centered (e.g. "left" centers vertically; "top" centers
+    // horizontally). Shared by applyDropdownGeometry and applyTileGeometry.
+    function anchoredPosition(area, w, h, direction) {
+        switch (direction) {
+            case "bottom":
+                return { x: area.x + Math.round((area.width - w) / 2), y: area.y + area.height - h };
+            case "left":
+                return { x: area.x, y: area.y + Math.round((area.height - h) / 2) };
+            case "right":
+                return { x: area.x + area.width - w, y: area.y + Math.round((area.height - h) / 2) };
+            case "top":
+            default:
+                return { x: area.x + Math.round((area.width - w) / 2), y: area.y };
+        }
+    }
+
     function applyDropdownGeometry(win, widthPct, heightPct, screenTarget, direction) {
         var screen = resolveScreen(screenTarget);
         var area = workspace.clientArea(KWin.MaximizeArea, screen, workspace.currentDesktop);
-        var fullW = area.width;
-        var fullH = area.height;
-        var w = Math.round(fullW * widthPct);
-        var h = Math.round(fullH * heightPct);
+        var w = Math.round(area.width  * widthPct);
+        var h = Math.round(area.height * heightPct);
+        var pos = anchoredPosition(area, w, h, direction);
+        win.frameGeometry = { x: pos.x, y: pos.y, width: w, height: h };
+    }
 
-        var x, y;
-        switch (direction) {
-            case "bottom":
-                x = area.x + Math.round((fullW - w) / 2);
-                y = area.y + fullH - h;
-                break;
-            case "left":
-                x = area.x;
-                y = area.y + Math.round((fullH - h) / 2);
-                break;
-            case "right":
-                x = area.x + fullW - w;
-                y = area.y + Math.round((fullH - h) / 2);
-                break;
-            case "top":
-            default:
-                x = area.x + Math.round((fullW - w) / 2);
-                y = area.y;
-                break;
+    // Positions two windows as a tile pair inside a widthPct×heightPct box
+    // anchored per direction (same rule as applyDropdownGeometry). orientation
+    // "horizontal" (default) splits that box's width — winLeft | winRight,
+    // left-to-right. orientation "vertical" splits its height instead —
+    // winLeft on top, winRight on bottom. Either way splitPct is winLeft's
+    // share, and if only one of the two is present it takes the full box
+    // instead — the other slot just isn't there yet, not an error.
+    function applyTileGeometry(winLeft, winRight, splitPct, widthPct, heightPct, screenTarget, direction, orientation) {
+        var screen = resolveScreen(screenTarget);
+        var area = workspace.clientArea(KWin.MaximizeArea, screen, workspace.currentDesktop);
+        var w = Math.round(area.width  * widthPct);
+        var h = Math.round(area.height * heightPct);
+        var pos = anchoredPosition(area, w, h, direction);
+        var x = pos.x, y = pos.y;
+
+        if (orientation === "vertical") {
+            var topH = Math.round(h * splitPct);
+            var botH = h - topH;
+            if (winLeft && winRight) {
+                winLeft.frameGeometry  = { x: x, y: y,        width: w, height: topH };
+                winRight.frameGeometry = { x: x, y: y + topH, width: w, height: botH };
+            } else if (winLeft) {
+                winLeft.frameGeometry = { x: x, y: y, width: w, height: h };
+            } else if (winRight) {
+                winRight.frameGeometry = { x: x, y: y, width: w, height: h };
+            }
+            return;
         }
 
-        area.x = x;
-        area.y = y;
-        area.width  = w;
-        area.height = h;
-        win.frameGeometry = area;
+        if (winLeft && winRight) {
+            var leftW  = Math.round(w * splitPct);
+            var rightW = w - leftW;
+            winLeft.frameGeometry  = { x: x,         y: y, width: leftW,  height: h };
+            winRight.frameGeometry = { x: x + leftW, y: y, width: rightW, height: h };
+        } else if (winLeft) {
+            winLeft.frameGeometry = { x: x, y: y, width: w, height: h };
+        } else if (winRight) {
+            winRight.frameGeometry = { x: x, y: y, width: w, height: h };
+        }
     }
 
     // ── Debug ─────────────────────────────────────────────────────────────────
@@ -118,6 +147,12 @@
     //
     var hiddenWindows = {}; // windowClass → { x, y, width, height, savedOpacity }
 
+    // Marks a tile pair as currently off-screen. Key: tile pair id (string
+    // "1".."10"). Just a boolean marker — unlike hiddenWindows, no geometry
+    // is restored on show (tile geometry is always recomputed from the split
+    // config, same as single-slot dropdowns already do on show).
+    var hiddenTiles = {}; // pairId → true
+
     // ── Slot config (mutable) ─────────────────────────────────────────────────
     //
     // Populated during shortcut registration. Keeps live widthPct/heightPct so
@@ -125,6 +160,11 @@
     // values immediately (without waiting for a script reload).
     //
     var slotConfig = {}; // windowClass → { idx, widthPct, heightPct, screenTarget, opacity, allDesktops, autoHide }
+
+    // ── Tile pair config (mutable) ────────────────────────────────────────────
+    //
+    // Populated during shortcut registration, same pattern as slotConfig.
+    var tileConfig = {}; // pairId → { idx, classLeft, classRight, splitPct, heightPct, screenTarget, opacity, allDesktops, autoHide, direction }
 
     // ── Hide helper ───────────────────────────────────────────────────────────
 
@@ -188,6 +228,42 @@
         dbg("auto/shortcut hide → " + windowClass + "\nAction: hidden (slide-out, " + direction + ")");
     }
 
+    // Hides both windows of a tile pair together, same direction, same
+    // off-screen-push logic as hideWindow (past the full screen union).
+    function hideTile(pairId) {
+        if (hiddenTiles[pairId] !== undefined) return;
+        var tile = tileConfig[pairId];
+        if (!tile) return;
+        var direction = tile.direction || "top";
+
+        var winLeft  = tile.classLeft  ? findByClass(tile.classLeft)  : null;
+        var winRight = tile.classRight ? findByClass(tile.classRight) : null;
+        if (!winLeft && !winRight) return;
+
+        hiddenTiles[pairId] = true;
+
+        var bounds = virtualScreenBounds();
+        [winLeft, winRight].forEach(function (win) {
+            if (!win) return;
+            win.skipTaskbar  = true;
+            win.skipPager    = true;
+            win.skipSwitcher = true;
+
+            var g = win.frameGeometry;
+            var offX = g.x, offY = g.y;
+            switch (direction) {
+                case "bottom": offY = bounds.y + bounds.height; break;
+                case "left":   offX = bounds.x - g.width;       break;
+                case "right":  offX = bounds.x + bounds.width;  break;
+                case "top":
+                default:       offY = bounds.y - g.height;      break;
+            }
+            win.frameGeometry = { x: offX, y: offY, width: g.width, height: g.height };
+        });
+
+        dbg("auto/shortcut hide → tile " + pairId + "\nAction: hidden (slide-out, " + direction + ")");
+    }
+
     // ── Toggle ────────────────────────────────────────────────────────────────
     function toggleWindow(windowClass, shortcut) {
         var win = findByClass(windowClass);
@@ -246,6 +322,58 @@
         workspace.activeWindow = win;
 
         dbg(shortcut + " → " + windowClass + " [" + (win.caption || "") + "]\nAction: shown (slide-in)");
+    }
+
+    // ── Tile toggle ───────────────────────────────────────────────────────────
+    function toggleTile(pairId, shortcut) {
+        var tile = tileConfig[pairId];
+        if (!tile) return;
+
+        var winLeft  = tile.classLeft  ? findByClass(tile.classLeft)  : null;
+        var winRight = tile.classRight ? findByClass(tile.classRight) : null;
+
+        if (!winLeft && !winRight) {
+            dbg(shortcut + " → tile " + pairId + "\nNeither window found");
+            return;
+        }
+
+        var isHidden  = hiddenTiles[pairId] !== undefined;
+        var anyActive = (winLeft && winLeft.active) || (winRight && winRight.active);
+
+        // ── Hide ──────────────────────────────────────────────────────────────
+        if (!isHidden && anyActive) {
+            hideTile(pairId);
+            return;
+        }
+
+        // ── Show ──────────────────────────────────────────────────────────────
+        if (isHidden) delete hiddenTiles[pairId];
+
+        [winLeft, winRight].forEach(function (win) {
+            if (!win) return;
+            win.keepAbove    = true;
+            win.skipTaskbar  = true;
+            win.skipPager    = true;
+            win.skipSwitcher = true;
+            if (win.minimized) win.minimized = false;
+        });
+
+        applyTileGeometry(winLeft, winRight, tile.splitPct, tile.widthPct, tile.heightPct, tile.screenTarget, tile.direction, tile.orientation);
+
+        [winLeft, winRight].forEach(function (win) {
+            if (!win) return;
+            win.onAllDesktops = tile.allDesktops;
+            win.opacity       = tile.opacity / 100.0;
+            win.skipTaskbar   = false;
+            win.skipPager     = false;
+            win.skipSwitcher  = false;
+        });
+
+        workspace.activeWindow = winLeft || winRight;
+
+        dbg(shortcut + " → tile " + pairId +
+            " [" + (tile.classLeft || "—") + " | " + (tile.classRight || "—") + "]" +
+            "\nAction: shown (slide-in)");
     }
 
     // ── Live resize ───────────────────────────────────────────────────────────
@@ -324,6 +452,55 @@
         registered++;
     }
 
+    // ── Tile pair registration ────────────────────────────────────────────────
+    var tilesRegistered = 0;
+    for (var t = 1; t <= 10; t++) {
+        var tClsL  = readConfig("tileClassLeft"    + t, "").trim();
+        var tClsR  = readConfig("tileClassRight"   + t, "").trim();
+        var tSc    = readConfig("tileShortcut"     + t, "").trim();
+        var tSplit = readConfig("tileSplitPercent" + t, 50)  / 100.0;
+        var tWPct  = readConfig("tileWidthPercent" + t, 100) / 100.0;
+        var tHPct  = readConfig("tileHeightPercent" + t, 100) / 100.0;
+        var tSPct  = readConfig("tileScreenTarget" + t, 0);
+        var tOpc   = readConfig("tileOpacity"      + t, 100);
+        var tAllD  = readConfig("tileAllDesktops"  + t, false);
+        var tAHide = readConfig("tileAutoHide"     + t, false);
+        var tDir   = readConfig("tileDirection"    + t, "top").trim() || "top";
+        var tOrient = readConfig("tileOrientation" + t, "horizontal").trim() || "horizontal";
+        // A tile pair needs at least one class configured, plus a shortcut.
+        if ((tClsL === "" && tClsR === "") || tSc === "") continue;
+
+        var pairId = String(t);
+        tileConfig[pairId] = {
+            idx: t, classLeft: tClsL, classRight: tClsR,
+            splitPct: tSplit, widthPct: tWPct, heightPct: tHPct, screenTarget: tSPct,
+            opacity: tOpc, allDesktops: tAllD, autoHide: tAHide,
+            direction: tDir, orientation: tOrient
+        };
+
+        (function (id, shortcut, classLeft, classRight) {
+            registerShortcut(
+                "DropdownTile-" + id,
+                "Dropdown tile: " + (classLeft || "—") + " | " + (classRight || "—"),
+                shortcut,
+                function () { toggleTile(id, shortcut); }
+            );
+
+            if (tileConfig[id].autoHide === true) {
+                workspace.windowActivated.connect(function (activeWin) {
+                    if (hiddenTiles[id] !== undefined) return;
+                    var wL = classLeft  ? findByClass(classLeft)  : null;
+                    var wR = classRight ? findByClass(classRight) : null;
+                    // We are (one of) the newly-active window(s) — don't self-hide.
+                    if (activeWin === wL || activeWin === wR) return;
+                    hideTile(id);
+                });
+            }
+        })(pairId, tSc, tClsL, tClsR);
+
+        tilesRegistered++;
+    }
+
     // ── Window class scanner ──────────────────────────────────────────────────
     //
     // Press Meta+Shift+W to see an OSD listing every open window's
@@ -373,5 +550,6 @@
     registerShortcut("DropdownAny-ResizeWidthDec",  "Dropdown: Decrease width",  "Alt+Shift+Left",
         function () { resizeActive(-RESIZE_STEP, 0); });
 
-    console.log("[DropdownAny] loaded — " + registered + "/10 slots active.");
+    console.log("[DropdownAny] loaded — " + registered + "/10 slots, " +
+                tilesRegistered + "/10 tile pairs active.");
 })();

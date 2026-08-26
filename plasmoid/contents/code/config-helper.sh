@@ -159,10 +159,34 @@ else:
 
 debug_mode = kread("debugMode", "false") == "true"
 
+# Tile pairs: always new-format (no legacy data predates this feature).
+tile_count_str = kread("tileCount", "0")
+tile_count = int(tile_count_str) if tile_count_str.lstrip("-").isdigit() else 0
+
+tiles = []
+for i in range(1, tile_count + 1):
+    n = str(i)
+    tiles.append({
+        "classLeft":     kread(f"tileClassLeft{n}"),
+        "classRight":    kread(f"tileClassRight{n}"),
+        "shortcut":      kread(f"tileShortcut{n}"),
+        "splitPercent":  to_int(kread(f"tileSplitPercent{n}",  "50"),  50),
+        "widthPercent":  to_int(kread(f"tileWidthPercent{n}",  "100"), 100),
+        "heightPercent": to_int(kread(f"tileHeightPercent{n}", "100"), 100),
+        "screenTarget":  to_int(kread(f"tileScreenTarget{n}",  "0"),   0),
+        "opacity":       to_int(kread(f"tileOpacity{n}",       "100"), 100),
+        "allDesktops":   kread(f"tileAllDesktops{n}", "false") == "true",
+        "autoHide":      kread(f"tileAutoHide{n}",    "false") == "true",
+        "direction":     kread(f"tileDirection{n}",   "top"),
+        "orientation":   kread(f"tileOrientation{n}", "horizontal"),
+    })
+
 print(json.dumps({
     "slotCount": len(slots),
     "debugMode":  debug_mode,
-    "slots":      slots
+    "slots":      slots,
+    "tileCount":  len(tiles),
+    "tiles":      tiles
 }))
 PYEOF
 }
@@ -199,6 +223,18 @@ cmd_save() {
       kwriteconfig6 --file kglobalshortcutsrc --group kwin \
         --key "DropdownAny-${old_cls}" --delete 2>/dev/null || true
     fi
+  done
+
+  # Tile shortcuts are keyed by pair index (not class — a pair has two
+  # classes), so just delete DropdownTile-{i} for every previously-known slot.
+  local old_tile_count=""
+  old_tile_count=$(kreadconfig6 --file kwinrc \
+    --group "$KWIN_GROUP" --key tileCount 2>/dev/null || true)
+  [[ "$old_tile_count" =~ ^[0-9]+$ ]] || old_tile_count=10
+
+  for i in $(seq 1 "$old_tile_count"); do
+    kwriteconfig6 --file kglobalshortcutsrc --group kwin \
+      --key "DropdownTile-${i}" --delete 2>/dev/null || true
   done
 
   # ── Step 2: write new config via Python (JSON parsing) ────────────────────
@@ -267,6 +303,61 @@ for i in range(count + 1, 21):
     n = str(i)
     for key in ["windowClass", "shortcut", "widthPercent", "heightPercent",
                 "screenTarget", "opacity", "allDesktops", "autoHide", "direction"]:
+        subprocess.run(
+            ["kwriteconfig6", "--file", "kwinrc", "--group", kwin_group,
+             "--key", f"{key}{n}", "--delete"],
+            capture_output=True
+        )
+
+# ── Tile pairs ──────────────────────────────────────────────────────────────
+tiles      = data.get("tiles", [])
+tile_count = len(tiles)
+
+kwrite("--file", "kwinrc", "--group", kwin_group,
+       "--key", "tileCount", str(tile_count))
+
+for i, tile in enumerate(tiles, 1):
+    n          = str(i)
+    cls_l      = tile.get("classLeft", "")
+    cls_r      = tile.get("classRight", "")
+    sc         = tile.get("shortcut", "")
+    split_pct  = str(tile.get("splitPercent",  50))
+    w_pct      = str(tile.get("widthPercent",  100))
+    h_pct      = str(tile.get("heightPercent", 100))
+    screen     = str(tile.get("screenTarget",  0))
+    opacity    = str(tile.get("opacity",       100))
+    all_d      = "true" if tile.get("allDesktops", False) else "false"
+    auto_h     = "true" if tile.get("autoHide",    False) else "false"
+    direction  = tile.get("direction", "top") or "top"
+    orientation = tile.get("orientation", "horizontal") or "horizontal"
+
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileClassLeft{n}", cls_l)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileClassRight{n}", cls_r)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileShortcut{n}", sc)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileSplitPercent{n}", split_pct)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileWidthPercent{n}", w_pct)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileHeightPercent{n}", h_pct)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileScreenTarget{n}", screen)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileOpacity{n}", opacity)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileAllDesktops{n}",
+           "--type", "bool", all_d)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileAutoHide{n}",
+           "--type", "bool", auto_h)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileDirection{n}", direction)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileOrientation{n}", orientation)
+
+    # Shortcut is keyed by pair index, not class (a pair has two classes).
+    if (cls_l or cls_r) and sc:
+        kwrite("--file", "kglobalshortcutsrc", "--group", "kwin",
+               "--key", f"DropdownTile-{n}",
+               f"{sc},none,Dropdown tile: {cls_l or '—'} | {cls_r or '—'}")
+
+# Delete stale tile entries beyond the current tile count
+for i in range(tile_count + 1, 21):
+    n = str(i)
+    for key in ["tileClassLeft", "tileClassRight", "tileShortcut", "tileSplitPercent",
+                "tileWidthPercent", "tileHeightPercent", "tileScreenTarget", "tileOpacity",
+                "tileAllDesktops", "tileAutoHide", "tileDirection", "tileOrientation"]:
         subprocess.run(
             ["kwriteconfig6", "--file", "kwinrc", "--group", kwin_group,
              "--key", f"{key}{n}", "--delete"],

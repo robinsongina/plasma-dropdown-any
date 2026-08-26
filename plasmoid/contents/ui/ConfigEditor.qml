@@ -31,6 +31,7 @@ Item {
 
     // ── models ───────────────────────────────────────────────────────────────
     ListModel { id: slotModel }
+    ListModel { id: tileModel }
     ListModel { id: windowClassModel }
 
     // ── state ─────────────────────────────────────────────────────────────────
@@ -51,6 +52,10 @@ Item {
     // Edge the dropdown slides in from/out to. Index-aligned with directionValues.
     readonly property var directionValues: ["top", "bottom", "left", "right"]
     readonly property var directionLabels: [qsTr("Top"), qsTr("Bottom"), qsTr("Left"), qsTr("Right")]
+
+    // Tile pair split axis. Index-aligned with orientationValues.
+    readonly property var orientationValues: ["horizontal", "vertical"]
+    readonly property var orientationLabels: [qsTr("Horizontal (side by side)"), qsTr("Vertical (top/bottom)")]
 
     // ── subprocess bridge ─────────────────────────────────────────────────────
     ExecBridge {
@@ -99,6 +104,25 @@ Item {
                     allDesktops:   s.allDesktops   !== undefined ? s.allDesktops   : false,
                     autoHide:      s.autoHide      !== undefined ? s.autoHide      : false,
                     direction:     s.direction     || "top"
+                })
+            }
+            tileModel.clear()
+            var tiles = data.tiles || []
+            for (var j = 0; j < tiles.length; j++) {
+                var t = tiles[j]
+                tileModel.append({
+                    classLeft:     t.classLeft     || "",
+                    classRight:    t.classRight    || "",
+                    shortcut:      t.shortcut      || "",
+                    splitPercent:  t.splitPercent  !== undefined ? t.splitPercent  : 50,
+                    widthPercent:  t.widthPercent  !== undefined ? t.widthPercent  : 100,
+                    heightPercent: t.heightPercent !== undefined ? t.heightPercent : 100,
+                    screenTarget:  t.screenTarget  !== undefined ? t.screenTarget  : 0,
+                    opacity:       t.opacity       !== undefined ? t.opacity       : 100,
+                    allDesktops:   t.allDesktops   !== undefined ? t.allDesktops   : false,
+                    autoHide:      t.autoHide      !== undefined ? t.autoHide      : false,
+                    direction:     t.direction     || "top",
+                    orientation:   t.orientation   || "horizontal"
                 })
             }
             dirty = false
@@ -207,6 +231,23 @@ Item {
         dirty = true
     }
 
+    // ── tile pair helpers ────────────────────────────────────────────────────
+    function addTile() {
+        tileModel.append({
+            classLeft: "", classRight: "", shortcut: "",
+            splitPercent: 50, widthPercent: 100, heightPercent: 100,
+            screenTarget: 0, opacity: 100,
+            allDesktops: false, autoHide: false,
+            direction: "top", orientation: "horizontal"
+        })
+        dirty = true
+    }
+
+    function removeTile(idx) {
+        tileModel.remove(idx)
+        dirty = true
+    }
+
     function _buildConfig() {
         var slots = []
         for (var i = 0; i < slotModel.count; i++) {
@@ -223,10 +264,30 @@ Item {
                 direction:     s.direction
             })
         }
+        var tiles = []
+        for (var j = 0; j < tileModel.count; j++) {
+            var t = tileModel.get(j)
+            tiles.push({
+                classLeft:     t.classLeft,
+                classRight:    t.classRight,
+                shortcut:      t.shortcut,
+                splitPercent:  t.splitPercent,
+                widthPercent:  t.widthPercent,
+                heightPercent: t.heightPercent,
+                screenTarget:  t.screenTarget,
+                opacity:       t.opacity,
+                allDesktops:   t.allDesktops,
+                autoHide:      t.autoHide,
+                direction:     t.direction,
+                orientation:   t.orientation
+            })
+        }
         return JSON.stringify({
             slotCount: slots.length,
             debugMode: debugMode,
-            slots:     slots
+            slots:     slots,
+            tileCount: tiles.length,
+            tiles:     tiles
         })
     }
 
@@ -636,6 +697,350 @@ Item {
                         icon.name: "list-add"
                         text: qsTr("Add slot")
                         onClicked: addSlot()
+                    }
+                }
+            }
+
+            // ── Tile pairs (side by side) ───────────────────────────────────────
+            Kirigami.Card {
+                Layout.fillWidth: true
+
+                header: Kirigami.Heading {
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
+                    text: qsTr("Tile pairs (side by side)")
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: 0
+
+                    // Column header
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+                        Controls.Label { text: "#";                    font.bold: true; Layout.preferredWidth: 20 }
+                        Controls.Label { text: qsTr("Left window");    font.bold: true; Layout.fillWidth: true }
+                        Controls.Label { text: qsTr("Right window");   font.bold: true; Layout.fillWidth: true }
+                        Controls.Label { text: qsTr("Shortcut");       font.bold: true; Layout.preferredWidth: 140 }
+                        Item { Layout.preferredWidth: 30 }
+                    }
+                    Kirigami.Separator { Layout.fillWidth: true }
+
+                    Repeater {
+                        model: tileModel
+                        delegate: Column {
+                            id: tileRow
+                            property int tileIdx: index
+                            property string savedClassLeft:  ""
+                            property string savedClassRight: ""
+                            Component.onCompleted: {
+                                savedClassLeft  = model.classLeft
+                                savedClassRight = model.classRight
+                            }
+
+                            width: parent.width
+
+                            // Row 1: which windows + shortcut
+                            RowLayout {
+                                width: parent.width
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Controls.Label {
+                                    text: index + 1
+                                    Layout.preferredWidth: 20
+                                }
+
+                                Controls.ComboBox {
+                                    id: classLeftCombo
+                                    Layout.fillWidth: true
+                                    editable: true
+                                    model: windowClassModel
+                                    textRole: "cls"
+
+                                    Component.onCompleted: editText = tileRow.savedClassLeft
+                                    Connections {
+                                        target: windowClassModel
+                                        function onCountChanged() {
+                                            classLeftCombo.editText = tileRow.savedClassLeft
+                                        }
+                                    }
+
+                                    delegate: Controls.ItemDelegate {
+                                        width: classLeftCombo.popup.width
+                                        highlighted: classLeftCombo.highlightedIndex === index
+                                        contentItem: ColumnLayout {
+                                            spacing: 1
+                                            Controls.Label {
+                                                text: model.cls
+                                                font.family: "monospace"
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+                                            Controls.Label {
+                                                text: model.title
+                                                color: Kirigami.Theme.disabledTextColor
+                                                Layout.fillWidth: true
+                                                visible: model.title !== ""
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                    }
+
+                                    onActivated: function(comboIdx) {
+                                        var cls = windowClassModel.get(comboIdx).cls
+                                        tileRow.savedClassLeft = cls
+                                        editText = cls
+                                        tileModel.set(tileRow.tileIdx, { classLeft: cls })
+                                        dirty = true
+                                    }
+
+                                    onActiveFocusChanged: {
+                                        if (!activeFocus) {
+                                            tileRow.savedClassLeft = editText
+                                            tileModel.set(tileRow.tileIdx, { classLeft: editText })
+                                            dirty = true
+                                        }
+                                    }
+                                }
+
+                                Controls.ComboBox {
+                                    id: classRightCombo
+                                    Layout.fillWidth: true
+                                    editable: true
+                                    model: windowClassModel
+                                    textRole: "cls"
+
+                                    Component.onCompleted: editText = tileRow.savedClassRight
+                                    Connections {
+                                        target: windowClassModel
+                                        function onCountChanged() {
+                                            classRightCombo.editText = tileRow.savedClassRight
+                                        }
+                                    }
+
+                                    delegate: Controls.ItemDelegate {
+                                        width: classRightCombo.popup.width
+                                        highlighted: classRightCombo.highlightedIndex === index
+                                        contentItem: ColumnLayout {
+                                            spacing: 1
+                                            Controls.Label {
+                                                text: model.cls
+                                                font.family: "monospace"
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+                                            Controls.Label {
+                                                text: model.title
+                                                color: Kirigami.Theme.disabledTextColor
+                                                Layout.fillWidth: true
+                                                visible: model.title !== ""
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                    }
+
+                                    onActivated: function(comboIdx) {
+                                        var cls = windowClassModel.get(comboIdx).cls
+                                        tileRow.savedClassRight = cls
+                                        editText = cls
+                                        tileModel.set(tileRow.tileIdx, { classRight: cls })
+                                        dirty = true
+                                    }
+
+                                    onActiveFocusChanged: {
+                                        if (!activeFocus) {
+                                            tileRow.savedClassRight = editText
+                                            tileModel.set(tileRow.tileIdx, { classRight: editText })
+                                            dirty = true
+                                        }
+                                    }
+                                }
+
+                                KQuickControls.KeySequenceItem {
+                                    Layout.preferredWidth: 140
+                                    keySequence: model.shortcut
+                                    checkForConflictsAgainst: 2  // ShortcutTypes.GlobalShortcuts
+                                    onKeySequenceModified: {
+                                        tileModel.set(tileRow.tileIdx, { shortcut: keySequence.toString() })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.ToolButton {
+                                    Layout.preferredWidth: 30
+                                    icon.name: "list-remove"
+                                    Controls.ToolTip.text: qsTr("Remove this tile pair")
+                                    Controls.ToolTip.visible: hovered
+                                    Controls.ToolTip.delay: 500
+                                    onClicked: removeTile(tileRow.tileIdx)
+                                }
+                            }
+
+                            // Row 2: geometry fields
+                            RowLayout {
+                                width: parent.width
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Item { Layout.preferredWidth: 20 }
+
+                                Controls.Label {
+                                    text: qsTr("Split")
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Controls.SpinBox {
+                                    Layout.preferredWidth: 90
+                                    from: 10; to: 90; stepSize: 5
+                                    value: model.splitPercent
+                                    textFromValue: function(v) { return v + " % / " + (100 - v) + " %" }
+                                    onValueModified: {
+                                        tileModel.set(tileRow.tileIdx, { splitPercent: value })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.Label {
+                                    text: qsTr("Width")
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Controls.SpinBox {
+                                    Layout.preferredWidth: 75
+                                    from: 10; to: 100; stepSize: 5
+                                    value: model.widthPercent
+                                    textFromValue: function(v) { return v + " %" }
+                                    onValueModified: {
+                                        tileModel.set(tileRow.tileIdx, { widthPercent: value })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.Label {
+                                    text: qsTr("Height")
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Controls.SpinBox {
+                                    Layout.preferredWidth: 75
+                                    from: 10; to: 100; stepSize: 5
+                                    value: model.heightPercent
+                                    textFromValue: function(v) { return v + " %" }
+                                    onValueModified: {
+                                        tileModel.set(tileRow.tileIdx, { heightPercent: value })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.ComboBox {
+                                    Layout.preferredWidth: 120
+                                    model: screenNames
+                                    currentIndex: tileModel.get(tileRow.tileIdx)
+                                                           ? tileModel.get(tileRow.tileIdx).screenTarget || 0
+                                                           : 0
+                                    onActivated: function(idx) {
+                                        tileModel.set(tileRow.tileIdx, { screenTarget: idx })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.ComboBox {
+                                    Layout.preferredWidth: 100
+                                    model: root.directionLabels
+                                    currentIndex: {
+                                        var row = tileModel.get(tileRow.tileIdx)
+                                        var idx = root.directionValues.indexOf(row ? (row.direction || "top") : "top")
+                                        return idx >= 0 ? idx : 0
+                                    }
+                                    onActivated: function(idx) {
+                                        tileModel.set(tileRow.tileIdx, { direction: root.directionValues[idx] })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.ComboBox {
+                                    Layout.preferredWidth: 190
+                                    model: root.orientationLabels
+                                    currentIndex: {
+                                        var row = tileModel.get(tileRow.tileIdx)
+                                        var idx = root.orientationValues.indexOf(row ? (row.orientation || "horizontal") : "horizontal")
+                                        return idx >= 0 ? idx : 0
+                                    }
+                                    onActivated: function(idx) {
+                                        tileModel.set(tileRow.tileIdx, { orientation: root.orientationValues[idx] })
+                                        dirty = true
+                                    }
+                                }
+
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            // Row 3: opacity + toggles
+                            RowLayout {
+                                width: parent.width
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Item { Layout.preferredWidth: 20 }
+
+                                Controls.Label {
+                                    text: qsTr("Opacity")
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Controls.SpinBox {
+                                    Layout.preferredWidth: 90
+                                    from: 0; to: 100; stepSize: 5
+                                    value: model.opacity
+                                    textFromValue: function(v) { return v + " %" }
+                                    onValueModified: {
+                                        tileModel.set(tileRow.tileIdx, { opacity: value })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.CheckBox {
+                                    text: qsTr("All workspaces")
+                                    checked: model.allDesktops
+                                    onToggled: {
+                                        tileModel.set(tileRow.tileIdx, { allDesktops: checked })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.CheckBox {
+                                    text: qsTr("Auto-hide on focus loss")
+                                    checked: model.autoHide
+                                    onToggled: {
+                                        tileModel.set(tileRow.tileIdx, { autoHide: checked })
+                                        dirty = true
+                                    }
+                                }
+
+                                Item { Layout.fillWidth: true }
+                            }
+
+                            Kirigami.Separator { width: parent.width }
+                        }
+                    }
+
+                    // Empty placeholder
+                    Controls.Label {
+                        visible: tileModel.count === 0
+                        Layout.fillWidth: true
+                        text: qsTr("No tile pairs configured — click Add tile pair to show two apps side by side.")
+                        horizontalAlignment: Text.AlignHCenter
+                        color: Kirigami.Theme.disabledTextColor
+                        padding: Kirigami.Units.largeSpacing
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // Add tile button
+                    Controls.Button {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        icon.name: "list-add"
+                        text: qsTr("Add tile pair")
+                        onClicked: addTile()
                     }
                 }
             }
