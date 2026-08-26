@@ -56,15 +56,42 @@
         return workspace.activeScreen;
     }
 
-    function applyDropdownGeometry(win, widthPct, heightPct, screenTarget) {
+    // direction: "top" (default), "bottom", "left", or "right" — which screen
+    // edge the dropdown is anchored to. The perpendicular axis is centered
+    // (e.g. "left" centers vertically; "top" centers horizontally).
+    function applyDropdownGeometry(win, widthPct, heightPct, screenTarget, direction) {
         var screen = resolveScreen(screenTarget);
         var area = workspace.clientArea(KWin.MaximizeArea, screen, workspace.currentDesktop);
         var fullW = area.width;
         var fullH = area.height;
-        area.width  = Math.round(fullW * widthPct);
-        area.height = Math.round(fullH * heightPct);
-        // Center horizontally when width < 100%
-        area.x = area.x + Math.round((fullW - area.width) / 2);
+        var w = Math.round(fullW * widthPct);
+        var h = Math.round(fullH * heightPct);
+
+        var x, y;
+        switch (direction) {
+            case "bottom":
+                x = area.x + Math.round((fullW - w) / 2);
+                y = area.y + fullH - h;
+                break;
+            case "left":
+                x = area.x;
+                y = area.y + Math.round((fullH - h) / 2);
+                break;
+            case "right":
+                x = area.x + fullW - w;
+                y = area.y + Math.round((fullH - h) / 2);
+                break;
+            case "top":
+            default:
+                x = area.x + Math.round((fullW - w) / 2);
+                y = area.y;
+                break;
+        }
+
+        area.x = x;
+        area.y = y;
+        area.width  = w;
+        area.height = h;
         win.frameGeometry = area;
     }
 
@@ -100,11 +127,34 @@
     var slotConfig = {}; // windowClass → { idx, widthPct, heightPct, screenTarget, opacity, allDesktops, autoHide }
 
     // ── Hide helper ───────────────────────────────────────────────────────────
+
+    // Raw pixel bounding box spanning every screen (union of Output.geometry,
+    // NOT clientArea — panels/docks don't shrink this). Hiding must clear this
+    // whole box: pushing a window just past ONE screen's edge either lands it
+    // on a neighboring monitor placed edge-to-edge (multi-monitor layouts) or,
+    // if computed from clientArea, right on top of a panel reservation instead
+    // of truly off-screen.
+    function virtualScreenBounds() {
+        var screens = workspace.screens;
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (var i = 0; i < screens.length; i++) {
+            var g = screens[i].geometry;
+            if (g.x < minX) minX = g.x;
+            if (g.y < minY) minY = g.y;
+            if (g.x + g.width  > maxX) maxX = g.x + g.width;
+            if (g.y + g.height > maxY) maxY = g.y + g.height;
+        }
+        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    }
+
     function hideWindow(windowClass) {
         var win = findByClass(windowClass);
         if (!win) return;
         // Guard: already off-screen — don't re-hide / re-snapshot.
         if (hiddenWindows[windowClass] !== undefined) return;
+
+        var slot      = slotConfig[windowClass];
+        var direction = (slot && slot.direction) || "top";
 
         var g = win.frameGeometry;
         hiddenWindows[windowClass] = {
@@ -120,9 +170,22 @@
         // re-snapshots a clean value and we never lose the original.
         win.opacity = hiddenWindows[windowClass].savedOpacity;
 
-        win.frameGeometry = { x: g.x, y: -g.height, width: g.width, height: g.height };
+        // Push the window a full window-dimension past the outer edge of ALL
+        // screens combined, so the GeometryChange effect can animate the
+        // slide back out that way without landing on another monitor or a panel.
+        var bounds = virtualScreenBounds();
+        var offX = g.x, offY = g.y;
+        switch (direction) {
+            case "bottom": offY = bounds.y + bounds.height; break;
+            case "left":   offX = bounds.x - g.width;       break;
+            case "right":  offX = bounds.x + bounds.width;  break;
+            case "top":
+            default:       offY = bounds.y - g.height;      break;
+        }
 
-        dbg("auto/shortcut hide → " + windowClass + "\nAction: hidden (slide-out)");
+        win.frameGeometry = { x: offX, y: offY, width: g.width, height: g.height };
+
+        dbg("auto/shortcut hide → " + windowClass + "\nAction: hidden (slide-out, " + direction + ")");
     }
 
     // ── Toggle ────────────────────────────────────────────────────────────────
@@ -170,7 +233,7 @@
 
         // Always position on the configured screen (cursor screen, Screen 1, etc.).
         // Uses slotConfig so live resize changes take effect immediately.
-        applyDropdownGeometry(win, slot.widthPct, slot.heightPct, slot.screenTarget);
+        applyDropdownGeometry(win, slot.widthPct, slot.heightPct, slot.screenTarget, slot.direction);
 
         win.onAllDesktops = slot.allDesktops;
         win.opacity = slot.opacity / 100.0;
@@ -206,7 +269,7 @@
         slot.widthPct  = Math.max(0.10, Math.min(1.0, slot.widthPct  + dw));
         slot.heightPct = Math.max(0.10, Math.min(1.0, slot.heightPct + dh));
 
-        applyDropdownGeometry(win, slot.widthPct, slot.heightPct, slot.screenTarget);
+        applyDropdownGeometry(win, slot.widthPct, slot.heightPct, slot.screenTarget, slot.direction);
 
         // Persist to kwinrc so the new values survive script reload.
         writeConfig("widthPercent"  + slot.idx, Math.round(slot.widthPct  * 100));
@@ -228,11 +291,12 @@
         var opc   = readConfig("opacity"       + i, 100);
         var allD  = readConfig("allDesktops"   + i, false);
         var aHide = readConfig("autoHide"      + i, false);
+        var dir   = readConfig("direction"     + i, "top").trim() || "top";
         if (cls === "" || sc === "") continue;
 
         slotConfig[cls] = {
             idx: i, widthPct: wPct, heightPct: hPct, screenTarget: sPct,
-            opacity: opc, allDesktops: allD, autoHide: aHide
+            opacity: opc, allDesktops: allD, autoHide: aHide, direction: dir
         };
 
         (function (windowClass, shortcut) {

@@ -135,6 +135,7 @@ if slot_count >= 0:
             "opacity":       to_int(kread(f"opacity{n}",       "100"), 100),
             "allDesktops":   kread(f"allDesktops{n}", "false") == "true",
             "autoHide":      kread(f"autoHide{n}",    "false") == "true",
+            "direction":     kread(f"direction{n}",   "top"),
         })
 else:
     # Legacy format: no slotCount key; scan up to 10, skip blank entries
@@ -153,6 +154,7 @@ else:
             "opacity":       to_int(kread(f"opacity{n}",       "100"), 100),
             "allDesktops":   kread(f"allDesktops{n}", "false") == "true",
             "autoHide":      kread(f"autoHide{n}",    "false") == "true",
+            "direction":     kread(f"direction{n}",   "top"),
         })
 
 debug_mode = kread("debugMode", "false") == "true"
@@ -179,7 +181,7 @@ cmd_save() {
   }
   require_tool kreadconfig6
   require_tool kwriteconfig6
-  step require_python3
+  require_python3
 
   local json_input="$1"
 
@@ -239,6 +241,7 @@ for i, slot in enumerate(slots, 1):
     opacity = str(slot.get("opacity",       100))
     all_d   = "true" if slot.get("allDesktops", False) else "false"
     auto_h  = "true" if slot.get("autoHide",    False) else "false"
+    direction = slot.get("direction", "top") or "top"
 
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"windowClass{n}", cls)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"shortcut{n}", sc)
@@ -250,6 +253,7 @@ for i, slot in enumerate(slots, 1):
            "--type", "bool", all_d)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"autoHide{n}",
            "--type", "bool", auto_h)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"direction{n}", direction)
 
     # Shortcut format: "Meta+F1,none,Dropdown toggle: Konsole"
     # Matches C++ kwinGroup.writeEntry("DropdownAny-Konsole", "Meta+F1,none,Dropdown toggle: Konsole")
@@ -262,7 +266,7 @@ for i, slot in enumerate(slots, 1):
 for i in range(count + 1, 21):
     n = str(i)
     for key in ["windowClass", "shortcut", "widthPercent", "heightPercent",
-                "screenTarget", "opacity", "allDesktops", "autoHide"]:
+                "screenTarget", "opacity", "allDesktops", "autoHide", "direction"]:
         subprocess.run(
             ["kwriteconfig6", "--file", "kwinrc", "--group", kwin_group,
              "--key", f"{key}{n}", "--delete"],

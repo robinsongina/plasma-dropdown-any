@@ -48,6 +48,10 @@ Item {
         return names
     }
 
+    // Edge the dropdown slides in from/out to. Index-aligned with directionValues.
+    readonly property var directionValues: ["top", "bottom", "left", "right"]
+    readonly property var directionLabels: [qsTr("Top"), qsTr("Bottom"), qsTr("Left"), qsTr("Right")]
+
     // ── subprocess bridge ─────────────────────────────────────────────────────
     ExecBridge {
         id: bridge
@@ -93,7 +97,8 @@ Item {
                     screenTarget:  s.screenTarget  !== undefined ? s.screenTarget  : 0,
                     opacity:       s.opacity       !== undefined ? s.opacity       : 100,
                     allDesktops:   s.allDesktops   !== undefined ? s.allDesktops   : false,
-                    autoHide:      s.autoHide      !== undefined ? s.autoHide      : false
+                    autoHide:      s.autoHide      !== undefined ? s.autoHide      : false,
+                    direction:     s.direction     || "top"
                 })
             }
             dirty = false
@@ -180,7 +185,8 @@ Item {
             windowClass: "", shortcut: "",
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
-            allDesktops: false, autoHide: false
+            allDesktops: false, autoHide: false,
+            direction: "top"
         })
         dirty = true
     }
@@ -190,7 +196,8 @@ Item {
             windowClass: cls, shortcut: "",
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
-            allDesktops: false, autoHide: false
+            allDesktops: false, autoHide: false,
+            direction: "top"
         })
         dirty = true
     }
@@ -212,7 +219,8 @@ Item {
                 screenTarget:  s.screenTarget,
                 opacity:       s.opacity,
                 allDesktops:   s.allDesktops,
-                autoHide:      s.autoHide
+                autoHide:      s.autoHide,
+                direction:     s.direction
             })
         }
         return JSON.stringify({
@@ -545,6 +553,25 @@ Item {
                                     textFromValue: function(v) { return v + " %" }
                                     onValueModified: {
                                         slotModel.set(slotRow.slotIdx, { opacity: value })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.Label {
+                                    text: qsTr("Slides from")
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Controls.ComboBox {
+                                    Layout.preferredWidth: 100
+                                    model: root.directionLabels
+                                    currentIndex: {
+                                        var row = slotModel.get(slotRow.slotIdx)
+                                        var idx = root.directionValues.indexOf(row ? (row.direction || "top") : "top")
+                                        return idx >= 0 ? idx : 0
+                                    }
+                                    onActivated: function(idx) {
+                                        slotModel.set(slotRow.slotIdx, { direction: root.directionValues[idx] })
                                         dirty = true
                                     }
                                 }
