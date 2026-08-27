@@ -34,6 +34,14 @@ class DropdownSlideEffect {
         this.duration = animationTime(duration);
 
         const raw = effect.readConfig("ManagedClasses", "");
+
+        // TEMP DEBUG — remove once the correct kwinrc group is confirmed.
+        callDBus(
+            "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService",
+            "showText", "dialog-information",
+            "[dropdown-slide effect] ManagedClasses read: '" + raw + "'"
+        );
+
         this.managedClasses = raw
             .split(",")
             .map(c => c.trim().toLowerCase())
