@@ -363,6 +363,25 @@ for i in range(tile_count + 1, 21):
              "--key", f"{key}{n}", "--delete"],
             capture_output=True
         )
+
+# ── plasma-dropdown-any-slide effect: keep its managed-class list in sync ──
+# The scoped slide effect can't read our kwinrc group itself (KWin's
+# effect.readConfig() only sees the effect's OWN config group), so we push
+# the combined list of every slot's and every tile pair's window class into
+# its group here, on every save.
+managed_classes = set()
+for slot in slots:
+    cls = slot.get("windowClass", "").strip()
+    if cls:
+        managed_classes.add(cls)
+for tile in tiles:
+    for key in ("classLeft", "classRight"):
+        cls = tile.get(key, "").strip()
+        if cls:
+            managed_classes.add(cls)
+
+kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
+       "--key", "ManagedClasses", ",".join(sorted(managed_classes)))
 PYEOF
     rm -f "${json_file}"
     echo "ERROR: failed to write configuration" >&2

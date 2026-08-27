@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_ID="plasma-dropdown-any"
+EFFECT_ID="plasma-dropdown-any-slide"
 PLASMOID_ID="org.kde.plasma.dropdownany"
 PLASMOID_HELPER="$HOME/.local/share/plasma/plasmoids/${PLASMOID_ID}/contents/code/config-helper.sh"
 
@@ -41,9 +42,26 @@ if [[ -f "$PLASMOID_HELPER" ]]; then
     echo "  config-helper.sh marked executable."
 fi
 
+echo ""
+echo "→ Installing KWin effect: $EFFECT_ID"
+
+# Install or upgrade the scoped slide effect. It only animates windows
+# managed by this plugin (see effect/contents/code/main.js), so it's an
+# opt-in alternative to a generic third-party geometry-change effect.
+if kpackagetool6 --type KWin/Effect --install "$SCRIPT_DIR/effect" 2>/dev/null; then
+    echo "  Installed."
+else
+    echo "  Already installed — upgrading."
+    kpackagetool6 --type KWin/Effect --upgrade "$SCRIPT_DIR/effect"
+fi
+
 # Enable KWin script
 kwriteconfig6 --file kwinrc --group Plugins --key "${SCRIPT_ID}Enabled" true
 echo "  Enabled in kwinrc."
+
+# Enable the slide effect
+kwriteconfig6 --file kwinrc --group Plugins --key "${EFFECT_ID}Enabled" true
+echo "  Slide effect enabled in kwinrc."
 
 # Reload KWin scripting engine
 if qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.start 2>/dev/null; then

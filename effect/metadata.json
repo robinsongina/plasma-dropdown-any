@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "KWin/Effect",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "rgn159@gmail.com",
+                "Name": "rgiraldo"
+            }
+        ],
+        "Description": "Slide animation for windows managed by the Dropdown Any Window KWin script — scoped to those windows only, unlike a generic geometry-change effect",
+        "Id": "plasma-dropdown-any-slide",
+        "License": "GPL-2.0-or-later",
+        "Name": "Dropdown Any — Slide",
+        "Version": "1.0.0",
+        "EnabledByDefault": false,
+        "ServiceTypes": ["KWin/Effect"]
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_ID="plasma-dropdown-any"
+EFFECT_ID="plasma-dropdown-any-slide"
 PLASMOID_ID="org.kde.plasma.dropdownany"
 KWIN_GROUP="Script-plasma-dropdown-any"
 
@@ -34,12 +35,15 @@ path = os.path.expanduser("~/.config/kwinrc")
 cfg = configparser.RawConfigParser()
 cfg.optionxform = str  # preserve key case
 cfg.read(path)
-section = "Script-plasma-dropdown-any"
-if cfg.has_section(section):
-    cfg.remove_section(section)
+changed = False
+for section in ("Script-plasma-dropdown-any", "Effect-plasma-dropdown-any-slide"):
+    if cfg.has_section(section):
+        cfg.remove_section(section)
+        print(f"  Removed [{section}] from kwinrc.")
+        changed = True
+if changed:
     with open(path, "w") as f:
         cfg.write(f, space_around_delimiters=False)
-    print("  Removed [Script-plasma-dropdown-any] from kwinrc.")
 PYEOF
 fi
 
@@ -50,8 +54,12 @@ kpackagetool6 --type KWin/Script --remove "$SCRIPT_ID" 2>/dev/null && echo "  Do
 echo "→ Removing Plasma applet package…"
 kpackagetool6 --type Plasma/Applet --remove "$PLASMOID_ID" 2>/dev/null && echo "  Done." || echo "  Not installed."
 
+echo "→ Removing KWin effect package…"
+kpackagetool6 --type KWin/Effect --remove "$EFFECT_ID" 2>/dev/null && echo "  Done." || echo "  Not installed."
+
 # ── Disable in kwinrc and reload KWin ────────────────────────────────────────
 kwriteconfig6 --file kwinrc --group Plugins --key "${SCRIPT_ID}Enabled" false
+kwriteconfig6 --file kwinrc --group Plugins --key "${EFFECT_ID}Enabled" false
 qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || \
     qdbus-qt6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || \
     qdbus org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
