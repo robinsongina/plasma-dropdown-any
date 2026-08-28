@@ -16,33 +16,13 @@
 // interpolate old→new geometry via a Translation+Scale pair. The only
 // real difference is the gate — an include list (only OUR windows)
 // instead of an exclude list (every window except a few).
-
-// TEMP DEBUG — top-level statements, run the instant this file is loaded/
-// parsed by KWin, before any class/constructor code. Two independent
-// channels (journal + OSD) since it's unconfirmed whether callDBus is even
-// injected into the effect scripting context (different globals than the
-// window-script context: effect/effects/animate/Effect/QEasingCurve).
-// Remove once the effect is confirmed working.
-console.log("[dropdown-slide effect] script file loaded");
-try {
-    callDBus(
-        "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService",
-        "showText", "dialog-information",
-        "[dropdown-slide effect] script file loaded"
-    );
-} catch (e) {
-    console.log("[dropdown-slide effect] callDBus threw: " + e);
-}
+//
+// NOTE: callDBus is NOT available in the effect scripting context (only in
+// window scripts) — confirmed by a ReferenceError while debugging this.
+// Use console.log (visible via `journalctl -t kwin_wayland`) here instead.
 
 class DropdownSlideEffect {
     constructor() {
-        // TEMP DEBUG — confirms the constructor itself runs.
-        callDBus(
-            "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService",
-            "showText", "dialog-information",
-            "[dropdown-slide effect] constructor started"
-        );
-
         effect.configChanged.connect(this.loadConfig.bind(this));
         effect.animationEnded.connect(this.onAnimationEnded.bind(this));
 
@@ -58,18 +38,13 @@ class DropdownSlideEffect {
         this.duration = animationTime(duration);
 
         const raw = effect.readConfig("ManagedClasses", "");
-
-        // TEMP DEBUG — remove once the correct kwinrc group is confirmed.
-        callDBus(
-            "org.kde.plasmashell", "/org/kde/osdService", "org.kde.osdService",
-            "showText", "dialog-information",
-            "[dropdown-slide effect] ManagedClasses read: '" + raw + "'"
-        );
-
         this.managedClasses = raw
             .split(",")
             .map(c => c.trim().toLowerCase())
             .filter(c => c.length > 0);
+
+        console.log("[dropdown-slide effect] loaded config — duration=" +
+            this.duration + "ms managedClasses=[" + this.managedClasses.join(", ") + "]");
     }
 
     manage(window) {
