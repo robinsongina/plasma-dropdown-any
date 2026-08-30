@@ -58,7 +58,7 @@ bash configure
 
 You can also add **Dropdown Any** as a panel widget from the usual "Add Widgets" picker if you'd rather keep it pinned somewhere.
 
-> After **Apply**, KWin doesn't pick up the new slot config automatically. The widget will tell you to disable and re-enable the script from **System Settings → KWin Scripts → "Dropdown Any Window"** — that one step still needs to be manual.
+> After **Apply**, KWin doesn't pick up the new slot config automatically. The widget will tell you to disable and re-enable the script from **System Settings → KWin Scripts → "Dropdown Any Window"** — that one step still needs to be manual. If you're using the bundled slide effect (see below) and changed a slot's animation style, also disable and re-enable **Desktop Effects → "Dropdown Any — Slide"**.
 
 ---
 

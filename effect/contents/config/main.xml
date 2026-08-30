@@ -5,20 +5,6 @@
                           http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
     <kcfgfile name=""/>
     <group name="">
-        <entry name="Duration" type="UInt">
-            <default>250</default>
-        </entry>
-        <entry name="AnimationCurve" type="Enum">
-            <choices>
-                <choice name="Smooth"/>
-                <choice name="Elastic"/>
-                <choice name="Bounce"/>
-                <choice name="Back"/>
-                <choice name="Linear"/>
-                <choice name="Flip3D"/>
-            </choices>
-            <default>Smooth</default>
-        </entry>
         <entry name="ManagedClasses" type="String">
             <default></default>
         </entry>

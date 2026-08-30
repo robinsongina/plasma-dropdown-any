@@ -136,6 +136,8 @@ if slot_count >= 0:
             "allDesktops":   kread(f"allDesktops{n}", "false") == "true",
             "autoHide":      kread(f"autoHide{n}",    "false") == "true",
             "direction":     kread(f"direction{n}",   "top"),
+            "animationStyle": kread(f"animationStyle{n}", "Smooth"),
+            "animationDuration": to_int(kread(f"animationDuration{n}", "250"), 250),
         })
 else:
     # Legacy format: no slotCount key; scan up to 10, skip blank entries
@@ -155,6 +157,8 @@ else:
             "allDesktops":   kread(f"allDesktops{n}", "false") == "true",
             "autoHide":      kread(f"autoHide{n}",    "false") == "true",
             "direction":     kread(f"direction{n}",   "top"),
+            "animationStyle": kread(f"animationStyle{n}", "Smooth"),
+            "animationDuration": to_int(kread(f"animationDuration{n}", "250"), 250),
         })
 
 debug_mode = kread("debugMode", "false") == "true"
@@ -179,6 +183,8 @@ for i in range(1, tile_count + 1):
         "autoHide":      kread(f"tileAutoHide{n}",    "false") == "true",
         "direction":     kread(f"tileDirection{n}",   "top"),
         "orientation":   kread(f"tileOrientation{n}", "horizontal"),
+        "animationStyle": kread(f"tileAnimationStyle{n}", "Smooth"),
+        "animationDuration": to_int(kread(f"tileAnimationDuration{n}", "250"), 250),
     })
 
 print(json.dumps({
@@ -278,6 +284,8 @@ for i, slot in enumerate(slots, 1):
     all_d   = "true" if slot.get("allDesktops", False) else "false"
     auto_h  = "true" if slot.get("autoHide",    False) else "false"
     direction = slot.get("direction", "top") or "top"
+    anim_style = slot.get("animationStyle", "Smooth") or "Smooth"
+    anim_duration = str(slot.get("animationDuration", 250))
 
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"windowClass{n}", cls)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"shortcut{n}", sc)
@@ -290,6 +298,8 @@ for i, slot in enumerate(slots, 1):
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"autoHide{n}",
            "--type", "bool", auto_h)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"direction{n}", direction)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"animationStyle{n}", anim_style)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"animationDuration{n}", anim_duration)
 
     # Shortcut format: "Meta+F1,none,Dropdown toggle: Konsole"
     # Matches C++ kwinGroup.writeEntry("DropdownAny-Konsole", "Meta+F1,none,Dropdown toggle: Konsole")
@@ -302,7 +312,8 @@ for i, slot in enumerate(slots, 1):
 for i in range(count + 1, 21):
     n = str(i)
     for key in ["windowClass", "shortcut", "widthPercent", "heightPercent",
-                "screenTarget", "opacity", "allDesktops", "autoHide", "direction"]:
+                "screenTarget", "opacity", "allDesktops", "autoHide", "direction",
+                "animationStyle", "animationDuration"]:
         subprocess.run(
             ["kwriteconfig6", "--file", "kwinrc", "--group", kwin_group,
              "--key", f"{key}{n}", "--delete"],
@@ -330,6 +341,8 @@ for i, tile in enumerate(tiles, 1):
     auto_h     = "true" if tile.get("autoHide",    False) else "false"
     direction  = tile.get("direction", "top") or "top"
     orientation = tile.get("orientation", "horizontal") or "horizontal"
+    anim_style = tile.get("animationStyle", "Smooth") or "Smooth"
+    anim_duration = str(tile.get("animationDuration", 250))
 
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileClassLeft{n}", cls_l)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileClassRight{n}", cls_r)
@@ -345,6 +358,8 @@ for i, tile in enumerate(tiles, 1):
            "--type", "bool", auto_h)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileDirection{n}", direction)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileOrientation{n}", orientation)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileAnimationStyle{n}", anim_style)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"tileAnimationDuration{n}", anim_duration)
 
     # Shortcut is keyed by pair index, not class (a pair has two classes).
     if (cls_l or cls_r) and sc:
@@ -357,7 +372,8 @@ for i in range(tile_count + 1, 21):
     n = str(i)
     for key in ["tileClassLeft", "tileClassRight", "tileShortcut", "tileSplitPercent",
                 "tileWidthPercent", "tileHeightPercent", "tileScreenTarget", "tileOpacity",
-                "tileAllDesktops", "tileAutoHide", "tileDirection", "tileOrientation"]:
+                "tileAllDesktops", "tileAutoHide", "tileDirection", "tileOrientation",
+                "tileAnimationStyle", "tileAnimationDuration"]:
         subprocess.run(
             ["kwriteconfig6", "--file", "kwinrc", "--group", kwin_group,
              "--key", f"{key}{n}", "--delete"],
@@ -367,21 +383,31 @@ for i in range(tile_count + 1, 21):
 # ── plasma-dropdown-any-slide effect: keep its managed-class list in sync ──
 # The scoped slide effect can't read our kwinrc group itself (KWin's
 # effect.readConfig() only sees the effect's OWN config group), so we push
-# the combined list of every slot's and every tile pair's window class into
-# its group here, on every save.
-managed_classes = set()
+# every slot's and every tile pair's window class(es) + chosen animation
+# style/duration ("class:Style:DurationMs" triples) into its group here, on
+# every save. A tile pair's style/duration applies to both of its windows;
+# a slot's own choice always wins if the same class also appears in a tile
+# pair.
+managed_classes = {}
 for slot in slots:
     cls = slot.get("windowClass", "").strip()
     if cls:
-        managed_classes.add(cls)
+        managed_classes[cls] = (
+            slot.get("animationStyle", "Smooth") or "Smooth",
+            slot.get("animationDuration", 250),
+        )
 for tile in tiles:
+    tile_style = tile.get("animationStyle", "Smooth") or "Smooth"
+    tile_duration = tile.get("animationDuration", 250)
     for key in ("classLeft", "classRight"):
         cls = tile.get(key, "").strip()
-        if cls:
-            managed_classes.add(cls)
+        if cls and cls not in managed_classes:
+            managed_classes[cls] = (tile_style, tile_duration)
 
+encoded = ",".join(f"{cls}:{style}:{duration}"
+                    for cls, (style, duration) in sorted(managed_classes.items()))
 kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
-       "--key", "ManagedClasses", ",".join(sorted(managed_classes)))
+       "--key", "ManagedClasses", encoded)
 PYEOF
     rm -f "${json_file}"
     echo "ERROR: failed to write configuration" >&2

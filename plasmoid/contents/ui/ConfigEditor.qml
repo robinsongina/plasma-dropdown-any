@@ -53,6 +53,12 @@ Item {
     readonly property var directionValues: ["top", "bottom", "left", "right"]
     readonly property var directionLabels: [qsTr("Top"), qsTr("Bottom"), qsTr("Left"), qsTr("Right")]
 
+    // Per-slot animation style, matching effect/contents/code/main.js's
+    // CURVE_NAMES exactly (index-aligned isn't required here since the
+    // value is stored/sent as the plain name string, not an index).
+    readonly property var styleValues: ["Smooth", "Elastic", "Bounce", "Back", "Linear", "Flip3D"]
+    readonly property var styleLabels: [qsTr("Smooth"), qsTr("Elastic"), qsTr("Bounce"), qsTr("Back"), qsTr("Linear"), qsTr("Flip 3D")]
+
     // Tile pair split axis. Index-aligned with orientationValues.
     readonly property var orientationValues: ["horizontal", "vertical"]
     readonly property var orientationLabels: [qsTr("Horizontal (side by side)"), qsTr("Vertical (top/bottom)")]
@@ -103,7 +109,9 @@ Item {
                     opacity:       s.opacity       !== undefined ? s.opacity       : 100,
                     allDesktops:   s.allDesktops   !== undefined ? s.allDesktops   : false,
                     autoHide:      s.autoHide      !== undefined ? s.autoHide      : false,
-                    direction:     s.direction     || "top"
+                    direction:     s.direction     || "top",
+                    animationStyle: s.animationStyle || "Smooth",
+                    animationDuration: s.animationDuration !== undefined ? s.animationDuration : 250
                 })
             }
             tileModel.clear()
@@ -122,7 +130,9 @@ Item {
                     allDesktops:   t.allDesktops   !== undefined ? t.allDesktops   : false,
                     autoHide:      t.autoHide      !== undefined ? t.autoHide      : false,
                     direction:     t.direction     || "top",
-                    orientation:   t.orientation   || "horizontal"
+                    orientation:   t.orientation   || "horizontal",
+                    animationStyle: t.animationStyle || "Smooth",
+                    animationDuration: t.animationDuration !== undefined ? t.animationDuration : 250
                 })
             }
             dirty = false
@@ -182,11 +192,13 @@ Item {
             _showStatus(qsTr("Save failed: %1").arg(stderr || "unknown error"), true)
             return
         }
-        // Save succeeded — notify user to manually reload the script
+        // Save succeeded — notify user to manually reload the script AND
+        // the slide effect (its per-window animation styles won't update
+        // otherwise — confirmed live, /KWin reconfigure alone isn't enough).
         _saving = false
         dirty = false
         _showStatus(
-            qsTr("Config saved. To apply: System Settings → KWin Scripts → disable and re-enable \"Dropdown Any Window\"."),
+            qsTr("Config saved. To apply: System Settings → KWin Scripts → disable and re-enable \"Dropdown Any Window\", and Desktop Effects → disable and re-enable \"Dropdown Any — Slide\"."),
             false
         )
     }
@@ -210,7 +222,7 @@ Item {
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
             allDesktops: false, autoHide: false,
-            direction: "top"
+            direction: "top", animationStyle: "Smooth", animationDuration: 250
         })
         dirty = true
     }
@@ -221,7 +233,7 @@ Item {
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
             allDesktops: false, autoHide: false,
-            direction: "top"
+            direction: "top", animationStyle: "Smooth", animationDuration: 250
         })
         dirty = true
     }
@@ -238,7 +250,7 @@ Item {
             splitPercent: 50, widthPercent: 100, heightPercent: 100,
             screenTarget: 0, opacity: 100,
             allDesktops: false, autoHide: false,
-            direction: "top", orientation: "horizontal"
+            direction: "top", orientation: "horizontal", animationStyle: "Smooth", animationDuration: 250
         })
         dirty = true
     }
@@ -261,7 +273,9 @@ Item {
                 opacity:       s.opacity,
                 allDesktops:   s.allDesktops,
                 autoHide:      s.autoHide,
-                direction:     s.direction
+                direction:     s.direction,
+                animationStyle: s.animationStyle,
+                animationDuration: s.animationDuration
             })
         }
         var tiles = []
@@ -279,7 +293,9 @@ Item {
                 allDesktops:   t.allDesktops,
                 autoHide:      t.autoHide,
                 direction:     t.direction,
-                orientation:   t.orientation
+                orientation:   t.orientation,
+                animationStyle: t.animationStyle,
+                animationDuration: t.animationDuration
             })
         }
         return JSON.stringify({
@@ -637,6 +653,36 @@ Item {
                                     }
                                 }
 
+                                Controls.Label {
+                                    text: qsTr("Style")
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Controls.ComboBox {
+                                    Layout.preferredWidth: 100
+                                    model: root.styleLabels
+                                    currentIndex: {
+                                        var row = slotModel.get(slotRow.slotIdx)
+                                        var idx = root.styleValues.indexOf(row ? (row.animationStyle || "Smooth") : "Smooth")
+                                        return idx >= 0 ? idx : 0
+                                    }
+                                    onActivated: function(idx) {
+                                        slotModel.set(slotRow.slotIdx, { animationStyle: root.styleValues[idx] })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.SpinBox {
+                                    Layout.preferredWidth: 110
+                                    from: 0; to: 9999; stepSize: 10
+                                    value: model.animationDuration !== undefined ? model.animationDuration : 250
+                                    textFromValue: function(v) { return v + " ms" }
+                                    onValueModified: {
+                                        slotModel.set(slotRow.slotIdx, { animationDuration: value })
+                                        dirty = true
+                                    }
+                                }
+
                                 Controls.CheckBox {
                                     text: qsTr("All workspaces")
                                     checked: model.allDesktops
@@ -967,6 +1013,31 @@ Item {
                                     }
                                     onActivated: function(idx) {
                                         tileModel.set(tileRow.tileIdx, { orientation: root.orientationValues[idx] })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.ComboBox {
+                                    Layout.preferredWidth: 100
+                                    model: root.styleLabels
+                                    currentIndex: {
+                                        var row = tileModel.get(tileRow.tileIdx)
+                                        var idx = root.styleValues.indexOf(row ? (row.animationStyle || "Smooth") : "Smooth")
+                                        return idx >= 0 ? idx : 0
+                                    }
+                                    onActivated: function(idx) {
+                                        tileModel.set(tileRow.tileIdx, { animationStyle: root.styleValues[idx] })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.SpinBox {
+                                    Layout.preferredWidth: 110
+                                    from: 0; to: 9999; stepSize: 10
+                                    value: model.animationDuration !== undefined ? model.animationDuration : 250
+                                    textFromValue: function(v) { return v + " ms" }
+                                    onValueModified: {
+                                        tileModel.set(tileRow.tileIdx, { animationDuration: value })
                                         dirty = true
                                     }
                                 }

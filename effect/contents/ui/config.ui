@@ -3,85 +3,10 @@
  <class>DropdownSlideEffectConfig</class>
  <widget class="QWidget" name="DropdownSlideEffectConfig">
   <layout class="QFormLayout" name="formLayout">
-   <item row="0" column="0">
-    <widget class="QLabel" name="label_Duration">
-     <property name="text">
-      <string>Duration:</string>
-     </property>
-    </widget>
-   </item>
-   <item row="0" column="1">
-    <widget class="QSpinBox" name="kcfg_Duration">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="suffix">
-      <string> milliseconds</string>
-     </property>
-     <property name="maximum">
-      <number>9999</number>
-     </property>
-     <property name="singleStep">
-      <number>5</number>
-     </property>
-    </widget>
-   </item>
-
-   <item row="1" column="0">
-    <widget class="QLabel" name="label_AnimationCurve">
-     <property name="text">
-      <string>Animation style:</string>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="1">
-    <widget class="QComboBox" name="kcfg_AnimationCurve">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <item>
-      <property name="text">
-       <string>Smooth</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Elastic</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Bounce</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Back</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Linear</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>Flip 3D</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-
-   <item row="2" column="0" colspan="2">
+   <item row="0" column="0" colspan="2">
     <widget class="QLabel" name="label_ManagedClassesNote">
      <property name="text">
-      <string>The list of window classes to animate is managed automatically by the Dropdown Any Window widget — no manual configuration needed here.</string>
+      <string>Which windows are animated, and each one's style (Smooth/Elastic/Bounce/Back/Linear/Flip 3D) and duration, are chosen per slot in the Dropdown Any Window widget — no manual configuration needed here.</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>
