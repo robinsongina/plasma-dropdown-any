@@ -153,6 +153,10 @@
     // config, same as single-slot dropdowns already do on show).
     var hiddenTiles = {}; // pairId → true
 
+    // Last slot/tile toggled via its own dedicated shortcut — lets the
+    // "repeat last" shortcut re-trigger it without knowing which one it was.
+    var lastActivated = null; // { type: "slot", id: windowClass } | { type: "tile", id: pairId }
+
     // ── Slot config (mutable) ─────────────────────────────────────────────────
     //
     // Populated during shortcut registration. Keeps live widthPct/heightPct so
@@ -272,6 +276,8 @@
             return;
         }
 
+        lastActivated = { type: "slot", id: windowClass };
+
         var slot        = slotConfig[windowClass];
         var isHidden    = hiddenWindows[windowClass] !== undefined;
         var isMinimized = win.minimized;
@@ -336,6 +342,8 @@
             dbg(shortcut + " → tile " + pairId + "\nNeither window found");
             return;
         }
+
+        lastActivated = { type: "tile", id: pairId };
 
         var isHidden  = hiddenTiles[pairId] !== undefined;
         var anyActive = (winLeft && winLeft.active) || (winRight && winRight.active);
@@ -540,14 +548,42 @@
         listWindowClasses
     );
 
+    // ── Repeat last activated ─────────────────────────────────────────────────
+    //
+    // Re-triggers whichever slot or tile pair was last toggled via its own
+    // dedicated shortcut (lastActivated is set inside toggleWindow/toggleTile).
+    // No-op until at least one slot/tile has been toggled once.
+    function toggleLastActivated() {
+        if (!lastActivated) {
+            dbg("Repeat last → nothing activated yet");
+            return;
+        }
+        if (lastActivated.type === "slot") {
+            toggleWindow(lastActivated.id, "Repeat last");
+        } else if (lastActivated.type === "tile") {
+            toggleTile(lastActivated.id, "Repeat last");
+        }
+    }
+
+    registerShortcut(
+        "DropdownAny-ToggleLast",
+        "Dropdown Any: Toggle last activated slot/tile",
+        readConfig("repeatLastShortcut", "Meta+Shift+R").trim() || "Meta+Shift+R",
+        toggleLastActivated
+    );
+
     // ── Resize shortcuts ──────────────────────────────────────────────────────
-    registerShortcut("DropdownAny-ResizeHeightInc", "Dropdown: Increase height", "Alt+Shift+Up",
+    registerShortcut("DropdownAny-ResizeHeightInc", "Dropdown: Increase height",
+        readConfig("resizeHeightIncShortcut", "Alt+Shift+Up").trim() || "Alt+Shift+Up",
         function () { resizeActive(0,  RESIZE_STEP); });
-    registerShortcut("DropdownAny-ResizeHeightDec", "Dropdown: Decrease height", "Alt+Shift+Down",
+    registerShortcut("DropdownAny-ResizeHeightDec", "Dropdown: Decrease height",
+        readConfig("resizeHeightDecShortcut", "Alt+Shift+Down").trim() || "Alt+Shift+Down",
         function () { resizeActive(0, -RESIZE_STEP); });
-    registerShortcut("DropdownAny-ResizeWidthInc",  "Dropdown: Increase width",  "Alt+Shift+Right",
+    registerShortcut("DropdownAny-ResizeWidthInc",  "Dropdown: Increase width",
+        readConfig("resizeWidthIncShortcut", "Alt+Shift+Right").trim() || "Alt+Shift+Right",
         function () { resizeActive( RESIZE_STEP, 0); });
-    registerShortcut("DropdownAny-ResizeWidthDec",  "Dropdown: Decrease width",  "Alt+Shift+Left",
+    registerShortcut("DropdownAny-ResizeWidthDec",  "Dropdown: Decrease width",
+        readConfig("resizeWidthDecShortcut", "Alt+Shift+Left").trim() || "Alt+Shift+Left",
         function () { resizeActive(-RESIZE_STEP, 0); });
 
     console.log("[DropdownAny] loaded — " + registered + "/10 slots, " +

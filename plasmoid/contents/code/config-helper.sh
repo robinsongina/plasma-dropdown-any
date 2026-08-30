@@ -163,6 +163,15 @@ else:
 
 debug_mode = kread("debugMode", "false") == "true"
 
+# Fixed global shortcuts (not per-slot) — repeat-last and live resize.
+# Defaults match the hardcoded values main.js used before these became
+# configurable, so existing installs keep behaving the same until changed.
+repeat_last_shortcut       = kread("repeatLastShortcut",       "Meta+Shift+R")
+resize_height_inc_shortcut = kread("resizeHeightIncShortcut",  "Alt+Shift+Up")
+resize_height_dec_shortcut = kread("resizeHeightDecShortcut",  "Alt+Shift+Down")
+resize_width_inc_shortcut  = kread("resizeWidthIncShortcut",   "Alt+Shift+Right")
+resize_width_dec_shortcut  = kread("resizeWidthDecShortcut",   "Alt+Shift+Left")
+
 # Tile pairs: always new-format (no legacy data predates this feature).
 tile_count_str = kread("tileCount", "0")
 tile_count = int(tile_count_str) if tile_count_str.lstrip("-").isdigit() else 0
@@ -192,7 +201,12 @@ print(json.dumps({
     "debugMode":  debug_mode,
     "slots":      slots,
     "tileCount":  len(tiles),
-    "tiles":      tiles
+    "tiles":      tiles,
+    "repeatLastShortcut":       repeat_last_shortcut,
+    "resizeHeightIncShortcut":  resize_height_inc_shortcut,
+    "resizeHeightDecShortcut":  resize_height_dec_shortcut,
+    "resizeWidthIncShortcut":   resize_width_inc_shortcut,
+    "resizeWidthDecShortcut":   resize_width_dec_shortcut
 }))
 PYEOF
 }
@@ -271,6 +285,22 @@ kwrite("--file", "kwinrc", "--group", kwin_group,
 kwrite("--file", "kwinrc", "--group", kwin_group,
        "--key", "debugMode", "--type", "bool",
        "true" if debug_mode else "false")
+
+# ── Fixed global shortcuts (repeat-last + live resize) ─────────────────────
+# Objects names below (DropdownAny-ToggleLast, etc.) must match the first
+# argument of the matching registerShortcut() calls in contents/code/main.js.
+global_shortcuts = {
+    "repeatLastShortcut":      ("DropdownAny-ToggleLast",      "Meta+Shift+R",   "Dropdown Any: Toggle last activated slot/tile"),
+    "resizeHeightIncShortcut": ("DropdownAny-ResizeHeightInc", "Alt+Shift+Up",   "Dropdown: Increase height"),
+    "resizeHeightDecShortcut": ("DropdownAny-ResizeHeightDec", "Alt+Shift+Down", "Dropdown: Decrease height"),
+    "resizeWidthIncShortcut":  ("DropdownAny-ResizeWidthInc",  "Alt+Shift+Right", "Dropdown: Increase width"),
+    "resizeWidthDecShortcut":  ("DropdownAny-ResizeWidthDec",  "Alt+Shift+Left", "Dropdown: Decrease width"),
+}
+for key, (object_name, default_sc, description) in global_shortcuts.items():
+    sc = data.get(key, "") or default_sc
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", key, sc)
+    kwrite("--file", "kglobalshortcutsrc", "--group", "kwin",
+           "--key", object_name, f"{sc},none,{description}")
 
 # Write each slot; also write shortcuts for non-empty cls+sc pairs
 for i, slot in enumerate(slots, 1):

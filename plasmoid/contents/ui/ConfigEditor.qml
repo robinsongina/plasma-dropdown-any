@@ -40,6 +40,14 @@ Item {
     property bool _saving:        false
     property bool _loadingWindows: false
 
+    // Fixed global shortcuts (not per-slot) — repeat-last and live resize.
+    // Defaults mirror what main.js used before these became configurable.
+    property string repeatLastShortcut:      "Meta+Shift+R"
+    property string resizeHeightIncShortcut: "Alt+Shift+Up"
+    property string resizeHeightDecShortcut: "Alt+Shift+Down"
+    property string resizeWidthIncShortcut:  "Alt+Shift+Right"
+    property string resizeWidthDecShortcut:  "Alt+Shift+Left"
+
     // Screen names built natively from Qt.application.screens
     readonly property var screenNames: {
         var names = [qsTr("At cursor screen")]
@@ -96,6 +104,11 @@ Item {
         try {
             var data = JSON.parse(stdout)
             debugMode = data.debugMode || false
+            repeatLastShortcut      = data.repeatLastShortcut      || "Meta+Shift+R"
+            resizeHeightIncShortcut = data.resizeHeightIncShortcut || "Alt+Shift+Up"
+            resizeHeightDecShortcut = data.resizeHeightDecShortcut || "Alt+Shift+Down"
+            resizeWidthIncShortcut  = data.resizeWidthIncShortcut  || "Alt+Shift+Right"
+            resizeWidthDecShortcut  = data.resizeWidthDecShortcut  || "Alt+Shift+Left"
             slotModel.clear()
             var slots = data.slots || []
             for (var i = 0; i < slots.length; i++) {
@@ -303,7 +316,12 @@ Item {
             debugMode: debugMode,
             slots:     slots,
             tileCount: tiles.length,
-            tiles:     tiles
+            tiles:     tiles,
+            repeatLastShortcut:      repeatLastShortcut,
+            resizeHeightIncShortcut: resizeHeightIncShortcut,
+            resizeHeightDecShortcut: resizeHeightDecShortcut,
+            resizeWidthIncShortcut:  resizeWidthIncShortcut,
+            resizeWidthDecShortcut:  resizeWidthDecShortcut
         })
     }
 
@@ -1122,6 +1140,53 @@ Item {
                 wrapMode: Text.WordWrap
                 color: Kirigami.Theme.disabledTextColor
                 text: qsTr("After saving, the KWin script is reloaded automatically.\nShortcut format: F12 · Meta+F1 · Ctrl+F12")
+            }
+
+            // ── Global shortcuts ────────────────────────────────────────────────
+            // Fixed, single-instance shortcuts (not per-slot) — repeat the last
+            // activated slot/tile, and live-resize the currently focused dropdown.
+            Kirigami.Card {
+                Layout.fillWidth: true
+
+                header: Kirigami.Heading {
+                    level: 3
+                    padding: Kirigami.Units.smallSpacing
+                    text: qsTr("Global shortcuts")
+                }
+
+                contentItem: GridLayout {
+                    columns: 2
+                    columnSpacing: Kirigami.Units.largeSpacing
+                    rowSpacing: Kirigami.Units.smallSpacing
+
+                    Repeater {
+                        model: [
+                            { label: qsTr("Repeat last activated slot/tile"), prop: "repeatLastShortcut" },
+                            { label: qsTr("Increase height"),                 prop: "resizeHeightIncShortcut" },
+                            { label: qsTr("Decrease height"),                 prop: "resizeHeightDecShortcut" },
+                            { label: qsTr("Increase width"),                  prop: "resizeWidthIncShortcut" },
+                            { label: qsTr("Decrease width"),                  prop: "resizeWidthDecShortcut" }
+                        ]
+                        delegate: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Controls.Label {
+                                text: modelData.label
+                                Layout.preferredWidth: 190
+                            }
+
+                            KQuickControls.KeySequenceItem {
+                                Layout.preferredWidth: 130
+                                keySequence: root[modelData.prop]
+                                checkForConflictsAgainst: 2  // ShortcutTypes.GlobalShortcuts
+                                onKeySequenceModified: {
+                                    root[modelData.prop] = keySequence.toString()
+                                    dirty = true
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // ── Developer options ─────────────────────────────────────────────
