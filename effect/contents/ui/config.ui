@@ -6,7 +6,7 @@
    <item row="0" column="0" colspan="2">
     <widget class="QLabel" name="label_ManagedClassesNote">
      <property name="text">
-      <string>Which windows are animated, and each one's style (Smooth/Elastic/Bounce/Back/Linear/Flip 3D) and duration, are chosen per slot in the Dropdown Any Window widget — no manual configuration needed here.</string>
+      <string>Which windows are animated, and each one's style (Smooth/Elastic/Bounce/Back/Linear/Flip 3D) and duration, are chosen per slot in the Dropdown Any Window widget — no manual configuration needed here. Temporary slots share one fallback style/duration instead (their app isn't known ahead of time), also set from the widget.</string>
      </property>
      <property name="wordWrap">
       <bool>true</bool>

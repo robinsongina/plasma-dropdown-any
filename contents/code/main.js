@@ -163,7 +163,21 @@
     // the resize shortcuts can update them and have toggleWindow pick up the new
     // values immediately (without waiting for a script reload).
     //
-    var slotConfig = {}; // windowClass → { idx, widthPct, heightPct, screenTarget, opacity, allDesktops, autoHide }
+    // Keyed by "trackingKey": for a normal slot this IS the window class; for
+    // a temporary slot (temporary: true, no configured class) it's a stable
+    // synthetic "temp:<idx>" key instead, since the real class isn't known
+    // until the user triggers it while some window is focused (see
+    // toggleWindow). boundClass holds that captured class, or null.
+    var slotConfig = {}; // trackingKey → { idx, widthPct, heightPct, screenTarget, opacity, allDesktops, autoHide, temporary?, boundClass? }
+
+    // Resolves a trackingKey to the actual window class to search for.
+    // Regular slots: trackingKey already IS the class. Temp slots: the class
+    // is whatever got bound at first trigger (or null if never triggered).
+    function resolveClass(trackingKey) {
+        var slot = slotConfig[trackingKey];
+        if (slot && slot.temporary) return slot.boundClass;
+        return trackingKey;
+    }
 
     // ── Tile pair config (mutable) ────────────────────────────────────────────
     //
@@ -191,17 +205,19 @@
         return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
-    function hideWindow(windowClass) {
-        var win = findByClass(windowClass);
+    function hideWindow(trackingKey) {
+        var cls = resolveClass(trackingKey);
+        if (!cls) return; // temp slot, never bound — nothing to hide
+        var win = findByClass(cls);
         if (!win) return;
         // Guard: already off-screen — don't re-hide / re-snapshot.
-        if (hiddenWindows[windowClass] !== undefined) return;
+        if (hiddenWindows[trackingKey] !== undefined) return;
 
-        var slot      = slotConfig[windowClass];
+        var slot      = slotConfig[trackingKey];
         var direction = (slot && slot.direction) || "top";
 
         var g = win.frameGeometry;
-        hiddenWindows[windowClass] = {
+        hiddenWindows[trackingKey] = {
             x: g.x, y: g.y, width: g.width, height: g.height,
             savedOpacity: win.opacity
         };
@@ -212,7 +228,7 @@
 
         // Restore user's original opacity BEFORE sliding out so the next show
         // re-snapshots a clean value and we never lose the original.
-        win.opacity = hiddenWindows[windowClass].savedOpacity;
+        win.opacity = hiddenWindows[trackingKey].savedOpacity;
 
         // Push the window a full window-dimension past the outer edge of ALL
         // screens combined, so the GeometryChange effect can animate the
@@ -229,7 +245,7 @@
 
         win.frameGeometry = { x: offX, y: offY, width: g.width, height: g.height };
 
-        dbg("auto/shortcut hide → " + windowClass + "\nAction: hidden (slide-out, " + direction + ")");
+        dbg("auto/shortcut hide → " + cls + "\nAction: hidden (slide-out, " + direction + ")");
     }
 
     // Hides both windows of a tile pair together, same direction, same
@@ -269,23 +285,39 @@
     }
 
     // ── Toggle ────────────────────────────────────────────────────────────────
-    function toggleWindow(windowClass, shortcut) {
-        var win = findByClass(windowClass);
+    function toggleWindow(trackingKey, shortcut) {
+        var slot = slotConfig[trackingKey];
+        if (!slot) return;
+
+        // Temp slot not yet bound: capture the focused window's class now,
+        // then fall straight through — since that window is focused, the
+        // "hide" branch below fires immediately (bind + hide in one press).
+        if (slot.temporary && !slot.boundClass) {
+            var activeWin = workspace.activeWindow;
+            if (!activeWin) {
+                dbg(shortcut + " → temp slot " + slot.idx + "\nNo focused window to bind");
+                return;
+            }
+            slot.boundClass = activeWin.resourceClass;
+            dbg(shortcut + " → temp slot " + slot.idx + "\nBound to " + slot.boundClass);
+        }
+
+        var cls = resolveClass(trackingKey);
+        var win = findByClass(cls);
         if (!win) {
-            dbg(shortcut + " → " + windowClass + "\nWindow not found");
+            dbg(shortcut + " → " + cls + "\nWindow not found");
             return;
         }
 
-        lastActivated = { type: "slot", id: windowClass };
+        lastActivated = { type: "slot", id: trackingKey };
 
-        var slot        = slotConfig[windowClass];
-        var isHidden    = hiddenWindows[windowClass] !== undefined;
+        var isHidden    = hiddenWindows[trackingKey] !== undefined;
         var isMinimized = win.minimized;
 
         // ── Hide ──────────────────────────────────────────────────────────────
         // Window is visible (not in our off-screen tracker, not minimized) and focused.
         if (!isHidden && !isMinimized && win.active) {
-            hideWindow(windowClass);
+            hideWindow(trackingKey);
             return;
         }
 
@@ -310,7 +342,7 @@
             // Always recompute geometry for the target screen — restoring the
             // saved position would put the window on the wrong screen if the
             // user changed screenTarget since the last hide.
-            delete hiddenWindows[windowClass];
+            delete hiddenWindows[trackingKey];
         }
 
         // Always position on the configured screen (cursor screen, Screen 1, etc.).
@@ -327,7 +359,43 @@
 
         workspace.activeWindow = win;
 
-        dbg(shortcut + " → " + windowClass + " [" + (win.caption || "") + "]\nAction: shown (slide-in)");
+        dbg(shortcut + " → " + cls + " [" + (win.caption || "") + "]\nAction: shown (slide-in)");
+    }
+
+    // ── Release a temp slot's binding ────────────────────────────────────────
+    //
+    // Lets the user free a temporary slot on demand — without closing the
+    // app — so a different app can bind to it next. If the window is
+    // currently parked off-screen (hidden by us), restore it to its
+    // original position first so it isn't left stranded; otherwise leave
+    // it exactly where it is. Either way, the slot forgets its binding.
+    function releaseTempSlot(trackingKey, shortcut) {
+        var slot = slotConfig[trackingKey];
+        if (!slot || !slot.temporary) return;
+        if (!slot.boundClass) {
+            dbg(shortcut + " → temp slot " + slot.idx + "\nAlready empty");
+            return;
+        }
+
+        var releasedClass = slot.boundClass;
+        var win = findByClass(releasedClass);
+
+        if (win && hiddenWindows[trackingKey] !== undefined) {
+            var saved = hiddenWindows[trackingKey];
+            win.frameGeometry = { x: saved.x, y: saved.y, width: saved.width, height: saved.height };
+            win.opacity = saved.savedOpacity;
+        }
+        if (win) {
+            win.keepAbove    = false;
+            win.skipTaskbar  = false;
+            win.skipPager    = false;
+            win.skipSwitcher = false;
+        }
+
+        delete hiddenWindows[trackingKey];
+        slot.boundClass = null;
+
+        dbg(shortcut + " → temp slot " + slot.idx + "\nReleased " + releasedClass);
     }
 
     // ── Tile toggle ───────────────────────────────────────────────────────────
@@ -398,7 +466,10 @@
         var slot = null;
         var matchedClass = null;
         for (var wc in slotConfig) {
-            if (wc.toLowerCase() === lc) { slot = slotConfig[wc]; matchedClass = wc; break; }
+            var candidateCls = resolveClass(wc);
+            if (candidateCls && candidateCls.toLowerCase() === lc) {
+                slot = slotConfig[wc]; matchedClass = candidateCls; break;
+            }
         }
         if (!slot) return; // active window is not a managed dropdown
 
@@ -418,6 +489,7 @@
 
     // ── Shortcut registration ─────────────────────────────────────────────────
     var registered = 0;
+    var hasTempSlots = false;
     for (var i = 1; i <= 10; i++) {
         var cls  = readConfig("windowClass"   + i, "").trim();
         var sc   = readConfig("shortcut"      + i, "").trim();
@@ -428,12 +500,54 @@
         var allD  = readConfig("allDesktops"   + i, false);
         var aHide = readConfig("autoHide"      + i, false);
         var dir   = readConfig("direction"     + i, "top").trim() || "top";
-        if (cls === "" || sc === "") continue;
+        var temp  = readConfig("temporary"     + i, false);
 
-        slotConfig[cls] = {
+        if (sc === "") continue;               // no shortcut → unusable regardless
+        if (cls === "" && !temp) continue;     // empty class only valid for temp slots
+
+        var entry = {
             idx: i, widthPct: wPct, heightPct: hPct, screenTarget: sPct,
             opacity: opc, allDesktops: allD, autoHide: aHide, direction: dir
         };
+
+        // ── Temporary slot: no fixed class — binds to whatever window is
+        // focused the first time its shortcut is pressed (see toggleWindow),
+        // and un-binds itself once that window closes (see windowRemoved
+        // listener below), ready to bind to a different app next time.
+        if (temp) {
+            entry.temporary  = true;
+            entry.boundClass = null;
+            hasTempSlots = true;
+
+            var tempKey = "temp:" + i;
+            slotConfig[tempKey] = entry;
+
+            (function (tempKey, shortcut, idx) {
+                registerShortcut(
+                    "DropdownAny-Temp" + idx,
+                    "Dropdown temp slot " + idx + " (binds to focused app)",
+                    shortcut,
+                    function () { toggleWindow(tempKey, shortcut); }
+                );
+
+                if (entry.autoHide === true) {
+                    workspace.windowActivated.connect(function (activeWin) {
+                        var s = slotConfig[tempKey];
+                        if (!s.boundClass) return; // not bound yet — nothing to hide
+                        if (hiddenWindows[tempKey] !== undefined) return;
+                        var win = findByClass(s.boundClass);
+                        if (!win) return;
+                        if (activeWin === win) return;
+                        hideWindow(tempKey);
+                    });
+                }
+            })(tempKey, sc, i);
+
+            registered++;
+            continue;
+        }
+
+        slotConfig[cls] = entry;
 
         (function (windowClass, shortcut) {
             registerShortcut(
@@ -458,6 +572,24 @@
         })(cls, sc);
 
         registered++;
+    }
+
+    // Free a temp slot's binding once its bound app has no windows left open,
+    // so the slot goes back to "empty" and can bind to a different app next.
+    if (hasTempSlots) {
+        workspace.windowRemoved.connect(function (removedWindow) {
+            var removedClass = removedWindow.resourceClass;
+            if (!removedClass) return;
+            for (var key in slotConfig) {
+                var slot = slotConfig[key];
+                if (!slot.temporary || !slot.boundClass) continue;
+                if (slot.boundClass !== removedClass) continue;
+                if (findByClass(slot.boundClass)) continue; // another window of that class remains open
+                delete hiddenWindows[key];
+                dbg("temp slot " + slot.idx + " → " + slot.boundClass + " closed, slot freed");
+                slot.boundClass = null;
+            }
+        });
     }
 
     // ── Tile pair registration ────────────────────────────────────────────────
@@ -570,6 +702,38 @@
         "Dropdown Any: Toggle last activated slot/tile",
         readConfig("repeatLastShortcut", "Meta+Shift+R").trim() || "Meta+Shift+R",
         toggleLastActivated
+    );
+
+    // ── Release active temp slot ─────────────────────────────────────────────
+    //
+    // One global shortcut instead of one per temp slot — releases whichever
+    // temp slot the currently focused window is bound to (a shown dropdown
+    // is always the focused window right after showing, see toggleWindow),
+    // freeing that slot for a different app next. No-op if the focused
+    // window isn't a bound temp slot.
+    function releaseActiveTempSlot(shortcut) {
+        var win = workspace.activeWindow;
+        if (!win) {
+            dbg(shortcut + " → Release temp slot\nNo focused window");
+            return;
+        }
+        var lc = win.resourceClass.toLowerCase();
+        for (var key in slotConfig) {
+            var slot = slotConfig[key];
+            if (!slot.temporary || !slot.boundClass) continue;
+            if (slot.boundClass.toLowerCase() === lc) {
+                releaseTempSlot(key, shortcut);
+                return;
+            }
+        }
+        dbg(shortcut + " → Release temp slot\nFocused window isn't a bound temp slot");
+    }
+
+    registerShortcut(
+        "DropdownAny-ReleaseTempSlot",
+        "Dropdown Any: Release active temp slot",
+        readConfig("releaseTempSlotShortcut", "Meta+Shift+X").trim() || "Meta+Shift+X",
+        function () { releaseActiveTempSlot("Release temp slot"); }
     );
 
     // ── Resize shortcuts ──────────────────────────────────────────────────────

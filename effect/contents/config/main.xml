@@ -8,5 +8,11 @@
         <entry name="ManagedClasses" type="String">
             <default></default>
         </entry>
+        <entry name="TempSlotStyle" type="String">
+            <default>Smooth</default>
+        </entry>
+        <entry name="TempSlotDurationMs" type="Int">
+            <default>250</default>
+        </entry>
     </group>
 </kcfg>

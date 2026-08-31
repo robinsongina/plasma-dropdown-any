@@ -138,6 +138,7 @@ if slot_count >= 0:
             "direction":     kread(f"direction{n}",   "top"),
             "animationStyle": kread(f"animationStyle{n}", "Smooth"),
             "animationDuration": to_int(kread(f"animationDuration{n}", "250"), 250),
+            "temporary":     kread(f"temporary{n}", "false") == "true",
         })
 else:
     # Legacy format: no slotCount key; scan up to 10, skip blank entries
@@ -159,6 +160,7 @@ else:
             "direction":     kread(f"direction{n}",   "top"),
             "animationStyle": kread(f"animationStyle{n}", "Smooth"),
             "animationDuration": to_int(kread(f"animationDuration{n}", "250"), 250),
+            "temporary":     kread(f"temporary{n}", "false") == "true",
         })
 
 debug_mode = kread("debugMode", "false") == "true"
@@ -171,6 +173,13 @@ resize_height_inc_shortcut = kread("resizeHeightIncShortcut",  "Alt+Shift+Up")
 resize_height_dec_shortcut = kread("resizeHeightDecShortcut",  "Alt+Shift+Down")
 resize_width_inc_shortcut  = kread("resizeWidthIncShortcut",   "Alt+Shift+Right")
 resize_width_dec_shortcut  = kread("resizeWidthDecShortcut",   "Alt+Shift+Left")
+release_temp_slot_shortcut = kread("releaseTempSlotShortcut",  "Meta+Shift+X")
+
+# Shared fallback animation for temporary slots — the effect can't look up
+# a per-slot style/duration for these since their class isn't known until
+# runtime (see effect/contents/code/main.js header comment).
+temp_slot_animation_style    = kread("tempSlotAnimationStyle",    "Smooth")
+temp_slot_animation_duration = to_int(kread("tempSlotAnimationDuration", "250"), 250)
 
 # Tile pairs: always new-format (no legacy data predates this feature).
 tile_count_str = kread("tileCount", "0")
@@ -206,7 +215,10 @@ print(json.dumps({
     "resizeHeightIncShortcut":  resize_height_inc_shortcut,
     "resizeHeightDecShortcut":  resize_height_dec_shortcut,
     "resizeWidthIncShortcut":   resize_width_inc_shortcut,
-    "resizeWidthDecShortcut":   resize_width_dec_shortcut
+    "resizeWidthDecShortcut":   resize_width_dec_shortcut,
+    "releaseTempSlotShortcut":  release_temp_slot_shortcut,
+    "tempSlotAnimationStyle":    temp_slot_animation_style,
+    "tempSlotAnimationDuration": temp_slot_animation_duration
 }))
 PYEOF
 }
@@ -243,6 +255,10 @@ cmd_save() {
       kwriteconfig6 --file kglobalshortcutsrc --group kwin \
         --key "DropdownAny-${old_cls}" --delete 2>/dev/null || true
     fi
+    # Temp slots never persist a class, so their shortcut is keyed by index
+    # instead — delete unconditionally (harmless no-op if it wasn't temp).
+    kwriteconfig6 --file kglobalshortcutsrc --group kwin \
+      --key "DropdownAny-Temp${i}" --delete 2>/dev/null || true
   done
 
   # Tile shortcuts are keyed by pair index (not class — a pair has two
@@ -295,6 +311,7 @@ global_shortcuts = {
     "resizeHeightDecShortcut": ("DropdownAny-ResizeHeightDec", "Alt+Shift+Down", "Dropdown: Decrease height"),
     "resizeWidthIncShortcut":  ("DropdownAny-ResizeWidthInc",  "Alt+Shift+Right", "Dropdown: Increase width"),
     "resizeWidthDecShortcut":  ("DropdownAny-ResizeWidthDec",  "Alt+Shift+Left", "Dropdown: Decrease width"),
+    "releaseTempSlotShortcut": ("DropdownAny-ReleaseTempSlot", "Meta+Shift+X",   "Dropdown Any: Release active temp slot"),
 }
 for key, (object_name, default_sc, description) in global_shortcuts.items():
     sc = data.get(key, "") or default_sc
@@ -302,10 +319,26 @@ for key, (object_name, default_sc, description) in global_shortcuts.items():
     kwrite("--file", "kglobalshortcutsrc", "--group", "kwin",
            "--key", object_name, f"{sc},none,{description}")
 
+# ── Temp slot fallback animation ────────────────────────────────────────────
+# Kept here (window script's own group) as the source of truth for this
+# plasmoid's load/save round-trip, and cross-written into the effect's own
+# group below (same pattern as ManagedClasses) so it can actually read it.
+temp_style    = data.get("tempSlotAnimationStyle", "Smooth") or "Smooth"
+temp_duration = str(data.get("tempSlotAnimationDuration", 250))
+kwrite("--file", "kwinrc", "--group", kwin_group, "--key", "tempSlotAnimationStyle", temp_style)
+kwrite("--file", "kwinrc", "--group", kwin_group, "--key", "tempSlotAnimationDuration", temp_duration)
+kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
+       "--key", "TempSlotStyle", temp_style)
+kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
+       "--key", "TempSlotDurationMs", temp_duration)
+
 # Write each slot; also write shortcuts for non-empty cls+sc pairs
 for i, slot in enumerate(slots, 1):
     n       = str(i)
-    cls     = slot.get("windowClass", "")
+    is_temp = bool(slot.get("temporary", False))
+    # A temp slot binds its class at runtime in the KWin script — never
+    # persist a leftover class for one, regardless of what the UI sent.
+    cls     = "" if is_temp else slot.get("windowClass", "")
     sc      = slot.get("shortcut", "")
     w_pct   = str(slot.get("widthPercent",  100))
     h_pct   = str(slot.get("heightPercent", 50))
@@ -330,10 +363,18 @@ for i, slot in enumerate(slots, 1):
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"direction{n}", direction)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"animationStyle{n}", anim_style)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"animationDuration{n}", anim_duration)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"temporary{n}",
+           "--type", "bool", "true" if is_temp else "false")
 
     # Shortcut format: "Meta+F1,none,Dropdown toggle: Konsole"
     # Matches C++ kwinGroup.writeEntry("DropdownAny-Konsole", "Meta+F1,none,Dropdown toggle: Konsole")
-    if cls and sc:
+    # Temp slots have no persisted class, so they're keyed by index instead
+    # (must match "DropdownAny-Temp" + idx in contents/code/main.js).
+    if is_temp and sc:
+        kwrite("--file", "kglobalshortcutsrc", "--group", "kwin",
+               "--key", f"DropdownAny-Temp{n}",
+               f"{sc},none,Dropdown temp slot {n} (binds to focused app)")
+    if not is_temp and cls and sc:
         kwrite("--file", "kglobalshortcutsrc", "--group", "kwin",
                "--key", f"DropdownAny-{cls}",
                f"{sc},none,Dropdown toggle: {cls}")
@@ -343,7 +384,7 @@ for i in range(count + 1, 21):
     n = str(i)
     for key in ["windowClass", "shortcut", "widthPercent", "heightPercent",
                 "screenTarget", "opacity", "allDesktops", "autoHide", "direction",
-                "animationStyle", "animationDuration"]:
+                "animationStyle", "animationDuration", "temporary"]:
         subprocess.run(
             ["kwriteconfig6", "--file", "kwinrc", "--group", kwin_group,
              "--key", f"{key}{n}", "--delete"],

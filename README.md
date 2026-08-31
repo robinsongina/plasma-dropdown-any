@@ -47,7 +47,16 @@ cd plasma-dropdown-any
 bash install.sh
 ```
 
-`install.sh` installs the KWin script and the Plasma widget via `kpackagetool6`, enables the script in `kwinrc`, and reloads KWin — no logout required for the script itself.
+`install.sh` installs the KWin script, the Plasma widget, and the slide effect via `kpackagetool6`, enables the ones it installs in `kwinrc`, and reloads KWin — no logout required for the script itself.
+
+To install/upgrade only some of them, pass their names:
+
+```bash
+bash install.sh effect           # only the slide effect
+bash install.sh script plasmoid  # script + widget, skip the effect
+```
+
+With no arguments it installs all three (`script`, `plasmoid`, `effect`), same as before.
 
 Then open the settings window:
 
@@ -64,6 +73,10 @@ You can also add **Dropdown Any** as a panel widget from the usual "Add Widgets"
 
 ## Configuration
 
+The widget's settings window has three tabs — **Slots**, **Temporary slots**, and **Tile pairs** — each backed by its own list, so a slot never has to carry an unused "temporary" checkbox or an unused class field.
+
+Each slot row in the Slots and Temporary slots tabs shows only the basics — App (or a fixed label for temporary slots), Shortcut, Width %, Height % — plus a ▼ button that expands the row to reveal Screen, Opacity, Slides from, Style, Duration, All workspaces, and Auto-hide.
+
 Each slot is configured independently with the following fields:
 
 | Field | Description | Example |
@@ -77,11 +90,28 @@ Each slot is configured independently with the following fields:
 | All workspaces | Pin the window to all virtual desktops | ✓ |
 | Auto-hide on focus loss | Hide automatically when the window loses focus | ✓ |
 
+The **Temporary slots** tab has every field above except Window class — see below.
+
+### Temporary slots
+
+A regular slot (Slots tab) always toggles the same window class. A **temporary slot** (Temporary slots tab) has every other field (width, height, screen, opacity, direction, style…) but no class field — it binds to whatever app is focused the first time you press its shortcut:
+
+1. Go to the **Temporary slots** tab, click **Add temporary slot**, set a shortcut.
+2. Focus any app and press that shortcut — it binds to that app's class and immediately slides it away (same as a normal slot's hide).
+3. Press the same shortcut again to show/hide it like any other slot.
+4. Close the app entirely — the slot un-binds itself and goes back to empty, ready to bind to a different app next time.
+
+The binding lives only in the running KWin script (never written to `kwinrc`), so it doesn't survive a script reload — you rebind by triggering the shortcut again.
+
+**Releasing without closing the app:** a single global shortcut, **Release active temp slot** (default `Meta+Shift+X`, configurable in **Global shortcuts** alongside Repeat last activated and the resize shortcuts), un-binds whichever temp slot the currently focused window belongs to — without closing the app — restoring the window to normal if it was currently hidden. That slot goes back to empty and is ready to bind to a different app on its next trigger.
+
+**Animation:** since a temporary slot's class isn't known ahead of time, it can't get a per-slot style/duration like regular slots do. Instead, all temporary slots share one fallback style/duration, set at the bottom of the **Temporary slots** tab (separate from each regular slot's own Style/Duration fields). The bundled slide effect recognizes a temporary slot's window by behavior — it always has `skipSwitcher` set while being moved (the only one of `skipTaskbar`/`skipPager`/`skipSwitcher` actually exposed to KWin effects) — rather than by a pre-registered class list.
+
 ### Live resize shortcuts
 
 While a dropdown window is active (focused), four shortcuts adjust its size in real time:
 
-| Shortcut | Action |
+| Shortcut (default) | Action |
 |----------|--------|
 | `Alt+Shift+Up` | Increase height by 5 % |
 | `Alt+Shift+Down` | Decrease height by 5 % |
@@ -90,9 +120,15 @@ While a dropdown window is active (focused), four shortcuts adjust its size in r
 
 Changes apply immediately and are persisted to `kwinrc` — the new percentages survive script reloads and system restarts. The Configure dialog reflects the updated values on next open.
 
-The shortcuts only do anything when the active window is a managed dropdown. If any other window is focused, they are silently ignored.
+The shortcuts only do anything when the active window is a managed dropdown (including a bound temporary slot). If any other window is focused, they are silently ignored.
 
-> **Note:** KWin scripting requires all shortcuts to be registered with KDE's global shortcut system (KGlobalAccel). These four shortcuts will appear in **System Settings → Keyboard → Shortcuts → KWin**. This is a platform limitation — there is no way to have "private" shortcuts in a KWin script. The default key bindings can be changed or removed from that dialog.
+There's also a **Repeat last activated** shortcut (default `Meta+Shift+R`) that re-triggers whichever slot or tile pair you last toggled via its own shortcut — handy for a keyboard-only "do that again" without remembering which key belongs to it.
+
+There's also **Release active temp slot** (default `Meta+Shift+X`) — see [Temporary slots](#temporary-slots) above.
+
+All six of these are configurable from the widget's **Global shortcuts** section, alongside the per-slot ones.
+
+> **Note:** KWin scripting requires all shortcuts to be registered with KDE's global shortcut system (KGlobalAccel). They will also appear in **System Settings → Keyboard → Shortcuts → KWin**. This is a platform limitation — there is no way to have "private" shortcuts in a KWin script.
 
 ### Finding a window's resource class
 

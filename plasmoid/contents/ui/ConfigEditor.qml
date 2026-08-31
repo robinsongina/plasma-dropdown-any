@@ -11,7 +11,7 @@ import org.kde.kquickcontrols as KQuickControls
  * Data flow:
  *   Component.onCompleted → bridge.run("load") + bridge.run("check-tools")
  *                         + bridge.run("list-windows")
- *   bridge.finished("load")         → populate slotModel + debugMode
+ *   bridge.finished("load")         → populate regularSlotModel/tempSlotModel + debugMode
  *   bridge.finished("check-tools")  → show capability banner if tools absent
  *   bridge.finished("list-windows") → populate windowClassModel
  *   Apply clicked                   → bridge.run("save", json)
@@ -30,7 +30,11 @@ Item {
     implicitHeight: 600
 
     // ── models ───────────────────────────────────────────────────────────────
-    ListModel { id: slotModel }
+    // Regular and temporary slots are separate models (separate tabs in the
+    // UI) even though config-helper.sh persists them as one flat "slots"
+    // array — each entry's own temporary flag tells them apart on save/load.
+    ListModel { id: regularSlotModel }
+    ListModel { id: tempSlotModel }
     ListModel { id: tileModel }
     ListModel { id: windowClassModel }
 
@@ -47,6 +51,13 @@ Item {
     property string resizeHeightDecShortcut: "Alt+Shift+Down"
     property string resizeWidthIncShortcut:  "Alt+Shift+Right"
     property string resizeWidthDecShortcut:  "Alt+Shift+Left"
+    property string releaseTempSlotShortcut: "Meta+Shift+X"
+
+    // Shared fallback animation for temporary slots — the slide effect can't
+    // look up a per-slot style/duration for these (class unknown ahead of
+    // time), so all temporary slots share this one instead.
+    property string tempSlotAnimationStyle:    "Smooth"
+    property int    tempSlotAnimationDuration: 250
 
     // Screen names built natively from Qt.application.screens
     readonly property var screenNames: {
@@ -109,12 +120,17 @@ Item {
             resizeHeightDecShortcut = data.resizeHeightDecShortcut || "Alt+Shift+Down"
             resizeWidthIncShortcut  = data.resizeWidthIncShortcut  || "Alt+Shift+Right"
             resizeWidthDecShortcut  = data.resizeWidthDecShortcut  || "Alt+Shift+Left"
-            slotModel.clear()
+            releaseTempSlotShortcut = data.releaseTempSlotShortcut || "Meta+Shift+X"
+            tempSlotAnimationStyle    = data.tempSlotAnimationStyle    || "Smooth"
+            tempSlotAnimationDuration = data.tempSlotAnimationDuration !== undefined ? data.tempSlotAnimationDuration : 250
+            regularSlotModel.clear()
+            tempSlotModel.clear()
             var slots = data.slots || []
             for (var i = 0; i < slots.length; i++) {
                 var s = slots[i]
-                slotModel.append({
-                    windowClass:   s.windowClass   || "",
+                var isTemp = s.temporary === true
+                var entry = {
+                    windowClass:   isTemp ? "" : (s.windowClass || ""),
                     shortcut:      s.shortcut      || "",
                     widthPercent:  s.widthPercent  !== undefined ? s.widthPercent  : 100,
                     heightPercent: s.heightPercent !== undefined ? s.heightPercent : 50,
@@ -125,7 +141,9 @@ Item {
                     direction:     s.direction     || "top",
                     animationStyle: s.animationStyle || "Smooth",
                     animationDuration: s.animationDuration !== undefined ? s.animationDuration : 250
-                })
+                }
+                if (isTemp) tempSlotModel.append(entry)
+                else regularSlotModel.append(entry)
             }
             tileModel.clear()
             var tiles = data.tiles || []
@@ -230,7 +248,7 @@ Item {
 
     // ── slot helpers ──────────────────────────────────────────────────────────
     function addSlot() {
-        slotModel.append({
+        regularSlotModel.append({
             windowClass: "", shortcut: "",
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
@@ -241,7 +259,7 @@ Item {
     }
 
     function addSlotWithClass(cls) {
-        slotModel.append({
+        regularSlotModel.append({
             windowClass: cls, shortcut: "",
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
@@ -252,8 +270,43 @@ Item {
     }
 
     function removeSlot(idx) {
-        slotModel.remove(idx)
+        regularSlotModel.remove(idx)
         dirty = true
+    }
+
+    // ── temp slot helpers ────────────────────────────────────────────────────
+    // Temp slot: no class — binds to whatever window is focused the first
+    // time its shortcut is triggered, and frees itself when that app closes
+    // (or via the global "Release active temp slot" shortcut).
+    function addTempSlot() {
+        tempSlotModel.append({
+            shortcut: "",
+            widthPercent: 100, heightPercent: 50,
+            screenTarget: 0, opacity: 100,
+            allDesktops: false, autoHide: false,
+            direction: "top", animationStyle: "Smooth", animationDuration: 250
+        })
+        dirty = true
+    }
+
+    function removeTempSlot(idx) {
+        tempSlotModel.remove(idx)
+        dirty = true
+    }
+
+    // Checked in both the Slots and Temporary slots tabs so a duplicate
+    // shortcut is caught across both, not just within the same list.
+    function isShortcutDuplicated(sc, ownModel, ownIdx) {
+        if (!sc) return false
+        for (var i = 0; i < regularSlotModel.count; i++) {
+            if (ownModel === regularSlotModel && i === ownIdx) continue
+            if (regularSlotModel.get(i).shortcut === sc) return true
+        }
+        for (var j = 0; j < tempSlotModel.count; j++) {
+            if (ownModel === tempSlotModel && j === ownIdx) continue
+            if (tempSlotModel.get(j).shortcut === sc) return true
+        }
+        return false
     }
 
     // ── tile pair helpers ────────────────────────────────────────────────────
@@ -275,8 +328,8 @@ Item {
 
     function _buildConfig() {
         var slots = []
-        for (var i = 0; i < slotModel.count; i++) {
-            var s = slotModel.get(i)
+        for (var i = 0; i < regularSlotModel.count; i++) {
+            var s = regularSlotModel.get(i)
             slots.push({
                 windowClass:   s.windowClass,
                 shortcut:      s.shortcut,
@@ -288,7 +341,25 @@ Item {
                 autoHide:      s.autoHide,
                 direction:     s.direction,
                 animationStyle: s.animationStyle,
-                animationDuration: s.animationDuration
+                animationDuration: s.animationDuration,
+                temporary:     false
+            })
+        }
+        for (var ti = 0; ti < tempSlotModel.count; ti++) {
+            var ts = tempSlotModel.get(ti)
+            slots.push({
+                windowClass:   "",
+                shortcut:      ts.shortcut,
+                widthPercent:  ts.widthPercent,
+                heightPercent: ts.heightPercent,
+                screenTarget:  ts.screenTarget,
+                opacity:       ts.opacity,
+                allDesktops:   ts.allDesktops,
+                autoHide:      ts.autoHide,
+                direction:     ts.direction,
+                animationStyle: ts.animationStyle,
+                animationDuration: ts.animationDuration,
+                temporary:     true
             })
         }
         var tiles = []
@@ -321,7 +392,10 @@ Item {
             resizeHeightIncShortcut: resizeHeightIncShortcut,
             resizeHeightDecShortcut: resizeHeightDecShortcut,
             resizeWidthIncShortcut:  resizeWidthIncShortcut,
-            resizeWidthDecShortcut:  resizeWidthDecShortcut
+            resizeWidthDecShortcut:  resizeWidthDecShortcut,
+            releaseTempSlotShortcut: releaseTempSlotShortcut,
+            tempSlotAnimationStyle:    tempSlotAnimationStyle,
+            tempSlotAnimationDuration: tempSlotAnimationDuration
         })
     }
 
@@ -432,9 +506,9 @@ Item {
                                 onClicked: {
                                     var cls = model.cls
                                     // Fill first empty slot, or create a new one
-                                    for (var i = 0; i < slotModel.count; i++) {
-                                        if (slotModel.get(i).windowClass === "") {
-                                            slotModel.set(i, { windowClass: cls })
+                                    for (var i = 0; i < regularSlotModel.count; i++) {
+                                        if (regularSlotModel.get(i).windowClass === "") {
+                                            regularSlotModel.set(i, { windowClass: cls })
                                             dirty = true
                                             return
                                         }
@@ -466,17 +540,22 @@ Item {
                 }
             }
 
-            // ── Registered slots ──────────────────────────────────────────────
+            // ── Slots / Temporary slots / Tile pairs ────────────────────────────
             Kirigami.Card {
                 Layout.fillWidth: true
 
-                header: Kirigami.Heading {
-                    level: 3
-                    padding: Kirigami.Units.smallSpacing
-                    text: qsTr("Registered dropdown slots")
+                header: Controls.TabBar {
+                    id: slotsTabBar
+                    Controls.TabButton { text: qsTr("Slots") }
+                    Controls.TabButton { text: qsTr("Temporary slots") }
+                    Controls.TabButton { text: qsTr("Tile pairs") }
                 }
 
-                contentItem: ColumnLayout {
+                contentItem: StackLayout {
+                    currentIndex: slotsTabBar.currentIndex
+
+                    // ── Slots tab ────────────────────────────────────────────
+                    ColumnLayout {
                     spacing: 0
 
                     // Column header
@@ -488,13 +567,12 @@ Item {
                         Controls.Label { text: qsTr("Shortcut");     font.bold: true; Layout.preferredWidth: 140 }
                         Controls.Label { text: qsTr("Width %");      font.bold: true; Layout.preferredWidth: 75 }
                         Controls.Label { text: qsTr("Height %");     font.bold: true; Layout.preferredWidth: 75 }
-                        Controls.Label { text: qsTr("Screen");       font.bold: true; Layout.preferredWidth: 120 }
-                        Item { Layout.preferredWidth: 30 }
+                        Item { Layout.preferredWidth: 60 }
                     }
                     Kirigami.Separator { Layout.fillWidth: true }
 
                     Repeater {
-                        model: slotModel
+                        model: regularSlotModel
                         delegate: Column {
                             id: slotRow
                             // index is a built-in Repeater property; bind slotIdx so
@@ -503,6 +581,10 @@ Item {
                             // savedClass holds the editable ComboBox text across
                             // model rebuilds (same pattern as kcm/ui/main.qml).
                             property string savedClass: ""
+                            // Advanced fields (Screen, Opacity, Slides from, Style,
+                            // Duration, All workspaces, Auto-hide) start collapsed —
+                            // only App/Shortcut/Width/Height show by default.
+                            property bool expanded: false
                             Component.onCompleted: savedClass = model.windowClass
 
                             width: parent.width
@@ -519,7 +601,7 @@ Item {
 
                                 Controls.ComboBox {
                                     id: classCombo
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 220
                                     editable: true
                                     model: windowClassModel
                                     textRole: "cls"
@@ -561,7 +643,7 @@ Item {
                                         var cls = windowClassModel.get(comboIdx).cls
                                         slotRow.savedClass = cls
                                         editText = cls
-                                        slotModel.set(slotRow.slotIdx, { windowClass: cls })
+                                        regularSlotModel.set(slotRow.slotIdx, { windowClass: cls })
                                         dirty = true
                                     }
 
@@ -569,7 +651,7 @@ Item {
                                     onActiveFocusChanged: {
                                         if (!activeFocus) {
                                             slotRow.savedClass = editText
-                                            slotModel.set(slotRow.slotIdx, { windowClass: editText })
+                                            regularSlotModel.set(slotRow.slotIdx, { windowClass: editText })
                                             dirty = true
                                         }
                                     }
@@ -580,7 +662,7 @@ Item {
                                     keySequence: model.shortcut
                                     checkForConflictsAgainst: 2  // ShortcutTypes.GlobalShortcuts
                                     onKeySequenceModified: {
-                                        slotModel.set(slotRow.slotIdx, { shortcut: keySequence.toString() })
+                                        regularSlotModel.set(slotRow.slotIdx, { shortcut: keySequence.toString() })
                                         dirty = true
                                     }
                                 }
@@ -591,7 +673,7 @@ Item {
                                     value: model.widthPercent
                                     textFromValue: function(v) { return v + " %" }
                                     onValueModified: {
-                                        slotModel.set(slotRow.slotIdx, { widthPercent: value })
+                                        regularSlotModel.set(slotRow.slotIdx, { widthPercent: value })
                                         dirty = true
                                     }
                                 }
@@ -602,21 +684,18 @@ Item {
                                     value: model.heightPercent
                                     textFromValue: function(v) { return v + " %" }
                                     onValueModified: {
-                                        slotModel.set(slotRow.slotIdx, { heightPercent: value })
+                                        regularSlotModel.set(slotRow.slotIdx, { heightPercent: value })
                                         dirty = true
                                     }
                                 }
 
-                                Controls.ComboBox {
-                                    Layout.preferredWidth: 120
-                                    model: screenNames
-                                    currentIndex: slotModel.get(slotRow.slotIdx)
-                                                           ? slotModel.get(slotRow.slotIdx).screenTarget || 0
-                                                           : 0
-                                    onActivated: function(idx) {
-                                        slotModel.set(slotRow.slotIdx, { screenTarget: idx })
-                                        dirty = true
-                                    }
+                                Controls.ToolButton {
+                                    Layout.preferredWidth: 30
+                                    icon.name: slotRow.expanded ? "arrow-up" : "arrow-down"
+                                    Controls.ToolTip.text: slotRow.expanded ? qsTr("Hide advanced options") : qsTr("Show advanced options")
+                                    Controls.ToolTip.visible: hovered
+                                    Controls.ToolTip.delay: 500
+                                    onClicked: slotRow.expanded = !slotRow.expanded
                                 }
 
                                 Controls.ToolButton {
@@ -629,75 +708,95 @@ Item {
                                 }
                             }
 
-                            // Row 2: secondary fields
-                            RowLayout {
+                            // Advanced fields — collapsed by default. Flow (not
+                            // RowLayout) so groups wrap onto new lines instead
+                            // of overflowing when the plasmoid is narrow; each
+                            // label+control pair is its own RowLayout so a wrap
+                            // never separates a label from its control.
+                            Flow {
                                 width: parent.width
                                 spacing: Kirigami.Units.smallSpacing
+                                visible: slotRow.expanded
 
-                                Item { Layout.preferredWidth: 20 }
-
-                                Controls.Label {
-                                    text: qsTr("Opacity")
-                                    Layout.alignment: Qt.AlignVCenter
-                                }
-
-                                Controls.SpinBox {
-                                    Layout.preferredWidth: 90
-                                    from: 0; to: 100; stepSize: 5
-                                    value: model.opacity
-                                    textFromValue: function(v) { return v + " %" }
-                                    onValueModified: {
-                                        slotModel.set(slotRow.slotIdx, { opacity: value })
-                                        dirty = true
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Screen"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.ComboBox {
+                                        Layout.preferredWidth: 120
+                                        model: screenNames
+                                        currentIndex: regularSlotModel.get(slotRow.slotIdx)
+                                                               ? regularSlotModel.get(slotRow.slotIdx).screenTarget || 0
+                                                               : 0
+                                        onActivated: function(idx) {
+                                            regularSlotModel.set(slotRow.slotIdx, { screenTarget: idx })
+                                            dirty = true
+                                        }
                                     }
                                 }
 
-                                Controls.Label {
-                                    text: qsTr("Slides from")
-                                    Layout.alignment: Qt.AlignVCenter
-                                }
-
-                                Controls.ComboBox {
-                                    Layout.preferredWidth: 100
-                                    model: root.directionLabels
-                                    currentIndex: {
-                                        var row = slotModel.get(slotRow.slotIdx)
-                                        var idx = root.directionValues.indexOf(row ? (row.direction || "top") : "top")
-                                        return idx >= 0 ? idx : 0
-                                    }
-                                    onActivated: function(idx) {
-                                        slotModel.set(slotRow.slotIdx, { direction: root.directionValues[idx] })
-                                        dirty = true
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Opacity"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.SpinBox {
+                                        Layout.preferredWidth: 90
+                                        from: 0; to: 100; stepSize: 5
+                                        value: model.opacity
+                                        textFromValue: function(v) { return v + " %" }
+                                        onValueModified: {
+                                            regularSlotModel.set(slotRow.slotIdx, { opacity: value })
+                                            dirty = true
+                                        }
                                     }
                                 }
 
-                                Controls.Label {
-                                    text: qsTr("Style")
-                                    Layout.alignment: Qt.AlignVCenter
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Slides from"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.ComboBox {
+                                        Layout.preferredWidth: 100
+                                        model: root.directionLabels
+                                        currentIndex: {
+                                            var row = regularSlotModel.get(slotRow.slotIdx)
+                                            var idx = root.directionValues.indexOf(row ? (row.direction || "top") : "top")
+                                            return idx >= 0 ? idx : 0
+                                        }
+                                        onActivated: function(idx) {
+                                            regularSlotModel.set(slotRow.slotIdx, { direction: root.directionValues[idx] })
+                                            dirty = true
+                                        }
+                                    }
                                 }
 
-                                Controls.ComboBox {
-                                    Layout.preferredWidth: 100
-                                    model: root.styleLabels
-                                    currentIndex: {
-                                        var row = slotModel.get(slotRow.slotIdx)
-                                        var idx = root.styleValues.indexOf(row ? (row.animationStyle || "Smooth") : "Smooth")
-                                        return idx >= 0 ? idx : 0
-                                    }
-                                    onActivated: function(idx) {
-                                        slotModel.set(slotRow.slotIdx, { animationStyle: root.styleValues[idx] })
-                                        dirty = true
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Style"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.ComboBox {
+                                        Layout.preferredWidth: 100
+                                        model: root.styleLabels
+                                        currentIndex: {
+                                            var row = regularSlotModel.get(slotRow.slotIdx)
+                                            var idx = root.styleValues.indexOf(row ? (row.animationStyle || "Smooth") : "Smooth")
+                                            return idx >= 0 ? idx : 0
+                                        }
+                                        onActivated: function(idx) {
+                                            regularSlotModel.set(slotRow.slotIdx, { animationStyle: root.styleValues[idx] })
+                                            dirty = true
+                                        }
                                     }
                                 }
 
-                                Controls.SpinBox {
-                                    Layout.preferredWidth: 110
-                                    from: 0; to: 9999; stepSize: 10
-                                    value: model.animationDuration !== undefined ? model.animationDuration : 250
-                                    textFromValue: function(v) { return v + " ms" }
-                                    onValueModified: {
-                                        slotModel.set(slotRow.slotIdx, { animationDuration: value })
-                                        dirty = true
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Duration"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.SpinBox {
+                                        Layout.preferredWidth: 110
+                                        from: 0; to: 9999; stepSize: 10
+                                        value: model.animationDuration !== undefined ? model.animationDuration : 250
+                                        textFromValue: function(v) { return v + " ms" }
+                                        onValueModified: {
+                                            regularSlotModel.set(slotRow.slotIdx, { animationDuration: value })
+                                            dirty = true
+                                        }
                                     }
                                 }
 
@@ -705,7 +804,7 @@ Item {
                                     text: qsTr("All workspaces")
                                     checked: model.allDesktops
                                     onToggled: {
-                                        slotModel.set(slotRow.slotIdx, { allDesktops: checked })
+                                        regularSlotModel.set(slotRow.slotIdx, { allDesktops: checked })
                                         dirty = true
                                     }
                                 }
@@ -714,28 +813,19 @@ Item {
                                     text: qsTr("Auto-hide on focus loss")
                                     checked: model.autoHide
                                     onToggled: {
-                                        slotModel.set(slotRow.slotIdx, { autoHide: checked })
+                                        regularSlotModel.set(slotRow.slotIdx, { autoHide: checked })
                                         dirty = true
                                     }
                                 }
-
-                                Item { Layout.fillWidth: true }
                             }
 
-                            // Duplicate shortcut warning
+                            // Duplicate shortcut warning (checked against both
+                            // Slots and Temporary slots — see isShortcutDuplicated)
                             Kirigami.InlineMessage {
                                 width: parent.width
                                 type: Kirigami.MessageType.Warning
-                                text: qsTr("This shortcut is already assigned to another slot in this list.")
-                                visible: {
-                                    var sc = model.shortcut
-                                    if (!sc) return false
-                                    for (var i = 0; i < slotModel.count; i++) {
-                                        if (i === slotRow.slotIdx) continue
-                                        if (slotModel.get(i).shortcut === sc) return true
-                                    }
-                                    return false
-                                }
+                                text: qsTr("This shortcut is already assigned to another slot.")
+                                visible: root.isShortcutDuplicated(model.shortcut, regularSlotModel, slotRow.slotIdx)
                             }
 
                             Kirigami.Separator { width: parent.width }
@@ -744,7 +834,7 @@ Item {
 
                     // Empty placeholder
                     Controls.Label {
-                        visible: slotModel.count === 0
+                        visible: regularSlotModel.count === 0
                         Layout.fillWidth: true
                         text: qsTr("No slots configured yet — click an active window above or use the Add button below.")
                         horizontalAlignment: Text.AlignHCenter
@@ -762,20 +852,290 @@ Item {
                         text: qsTr("Add slot")
                         onClicked: addSlot()
                     }
-                }
-            }
+                    } // end Slots tab
 
-            // ── Tile pairs (side by side) ───────────────────────────────────────
-            Kirigami.Card {
-                Layout.fillWidth: true
+                    // ── Temporary slots tab ─────────────────────────────────────
+                    ColumnLayout {
+                    spacing: 0
 
-                header: Kirigami.Heading {
-                    level: 3
-                    padding: Kirigami.Units.smallSpacing
-                    text: qsTr("Tile pairs (side by side)")
-                }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+                        Controls.Label { text: "#";              font.bold: true; Layout.preferredWidth: 20 }
+                        Controls.Label { text: qsTr("App");      font.bold: true; Layout.fillWidth: true }
+                        Controls.Label { text: qsTr("Shortcut"); font.bold: true; Layout.preferredWidth: 140 }
+                        Controls.Label { text: qsTr("Width %");  font.bold: true; Layout.preferredWidth: 75 }
+                        Controls.Label { text: qsTr("Height %"); font.bold: true; Layout.preferredWidth: 75 }
+                        Item { Layout.preferredWidth: 60 }
+                    }
+                    Kirigami.Separator { Layout.fillWidth: true }
 
-                contentItem: ColumnLayout {
+                    Repeater {
+                        model: tempSlotModel
+                        delegate: Column {
+                            id: tempSlotRow
+                            property int slotIdx: index
+                            // Advanced fields start collapsed — only Shortcut/
+                            // Width/Height show by default.
+                            property bool expanded: false
+
+                            width: parent.width
+
+                            RowLayout {
+                                width: parent.width
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Controls.Label {
+                                    text: index + 1
+                                    Layout.preferredWidth: 20
+                                }
+
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: qsTr("(binds to focused app)")
+                                    color: Kirigami.Theme.disabledTextColor
+                                    font.italic: true
+                                }
+
+                                KQuickControls.KeySequenceItem {
+                                    Layout.preferredWidth: 140
+                                    keySequence: model.shortcut
+                                    checkForConflictsAgainst: 2  // ShortcutTypes.GlobalShortcuts
+                                    onKeySequenceModified: {
+                                        tempSlotModel.set(tempSlotRow.slotIdx, { shortcut: keySequence.toString() })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.SpinBox {
+                                    Layout.preferredWidth: 75
+                                    from: 10; to: 100; stepSize: 5
+                                    value: model.widthPercent
+                                    textFromValue: function(v) { return v + " %" }
+                                    onValueModified: {
+                                        tempSlotModel.set(tempSlotRow.slotIdx, { widthPercent: value })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.SpinBox {
+                                    Layout.preferredWidth: 75
+                                    from: 10; to: 100; stepSize: 5
+                                    value: model.heightPercent
+                                    textFromValue: function(v) { return v + " %" }
+                                    onValueModified: {
+                                        tempSlotModel.set(tempSlotRow.slotIdx, { heightPercent: value })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.ToolButton {
+                                    Layout.preferredWidth: 30
+                                    icon.name: tempSlotRow.expanded ? "arrow-up" : "arrow-down"
+                                    Controls.ToolTip.text: tempSlotRow.expanded ? qsTr("Hide advanced options") : qsTr("Show advanced options")
+                                    Controls.ToolTip.visible: hovered
+                                    Controls.ToolTip.delay: 500
+                                    onClicked: tempSlotRow.expanded = !tempSlotRow.expanded
+                                }
+
+                                Controls.ToolButton {
+                                    Layout.preferredWidth: 30
+                                    icon.name: "list-remove"
+                                    Controls.ToolTip.text: qsTr("Remove this slot")
+                                    Controls.ToolTip.visible: hovered
+                                    Controls.ToolTip.delay: 500
+                                    onClicked: removeTempSlot(tempSlotRow.slotIdx)
+                                }
+                            }
+
+                            // Advanced fields — collapsed by default (Flow wraps
+                            // instead of overflowing on a narrow plasmoid, see
+                            // the matching comment in the Slots tab above).
+                            Flow {
+                                width: parent.width
+                                spacing: Kirigami.Units.smallSpacing
+                                visible: tempSlotRow.expanded
+
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Screen"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.ComboBox {
+                                        Layout.preferredWidth: 120
+                                        model: screenNames
+                                        currentIndex: tempSlotModel.get(tempSlotRow.slotIdx)
+                                                               ? tempSlotModel.get(tempSlotRow.slotIdx).screenTarget || 0
+                                                               : 0
+                                        onActivated: function(idx) {
+                                            tempSlotModel.set(tempSlotRow.slotIdx, { screenTarget: idx })
+                                            dirty = true
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Opacity"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.SpinBox {
+                                        Layout.preferredWidth: 90
+                                        from: 0; to: 100; stepSize: 5
+                                        value: model.opacity
+                                        textFromValue: function(v) { return v + " %" }
+                                        onValueModified: {
+                                            tempSlotModel.set(tempSlotRow.slotIdx, { opacity: value })
+                                            dirty = true
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Slides from"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.ComboBox {
+                                        Layout.preferredWidth: 100
+                                        model: root.directionLabels
+                                        currentIndex: {
+                                            var row = tempSlotModel.get(tempSlotRow.slotIdx)
+                                            var idx = root.directionValues.indexOf(row ? (row.direction || "top") : "top")
+                                            return idx >= 0 ? idx : 0
+                                        }
+                                        onActivated: function(idx) {
+                                            tempSlotModel.set(tempSlotRow.slotIdx, { direction: root.directionValues[idx] })
+                                            dirty = true
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Style"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.ComboBox {
+                                        Layout.preferredWidth: 100
+                                        model: root.styleLabels
+                                        currentIndex: {
+                                            var row = tempSlotModel.get(tempSlotRow.slotIdx)
+                                            var idx = root.styleValues.indexOf(row ? (row.animationStyle || "Smooth") : "Smooth")
+                                            return idx >= 0 ? idx : 0
+                                        }
+                                        onActivated: function(idx) {
+                                            tempSlotModel.set(tempSlotRow.slotIdx, { animationStyle: root.styleValues[idx] })
+                                            dirty = true
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    spacing: Kirigami.Units.smallSpacing
+                                    Controls.Label { text: qsTr("Duration"); Layout.alignment: Qt.AlignVCenter }
+                                    Controls.SpinBox {
+                                        Layout.preferredWidth: 110
+                                        from: 0; to: 9999; stepSize: 10
+                                        value: model.animationDuration !== undefined ? model.animationDuration : 250
+                                        textFromValue: function(v) { return v + " ms" }
+                                        onValueModified: {
+                                            tempSlotModel.set(tempSlotRow.slotIdx, { animationDuration: value })
+                                            dirty = true
+                                        }
+                                    }
+                                }
+
+                                Controls.CheckBox {
+                                    text: qsTr("All workspaces")
+                                    checked: model.allDesktops
+                                    onToggled: {
+                                        tempSlotModel.set(tempSlotRow.slotIdx, { allDesktops: checked })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.CheckBox {
+                                    text: qsTr("Auto-hide on focus loss")
+                                    checked: model.autoHide
+                                    onToggled: {
+                                        tempSlotModel.set(tempSlotRow.slotIdx, { autoHide: checked })
+                                        dirty = true
+                                    }
+                                }
+                            }
+
+                            Kirigami.InlineMessage {
+                                width: parent.width
+                                type: Kirigami.MessageType.Warning
+                                text: qsTr("This shortcut is already assigned to another slot.")
+                                visible: root.isShortcutDuplicated(model.shortcut, tempSlotModel, tempSlotRow.slotIdx)
+                            }
+
+                            Kirigami.Separator { width: parent.width }
+                        }
+                    }
+
+                    Controls.Label {
+                        visible: tempSlotModel.count === 0
+                        Layout.fillWidth: true
+                        text: qsTr("No temporary slots configured yet — click Add temporary slot below.")
+                        horizontalAlignment: Text.AlignHCenter
+                        color: Kirigami.Theme.disabledTextColor
+                        padding: Kirigami.Units.largeSpacing
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Controls.Button {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        icon.name: "list-add"
+                        text: qsTr("Add temporary slot")
+                        Controls.ToolTip.text: qsTr("No fixed app — binds to whichever window is focused when its shortcut is first triggered, and frees itself once that app closes.")
+                        Controls.ToolTip.visible: hovered
+                        Controls.ToolTip.delay: 500
+                        onClicked: addTempSlot()
+                    }
+
+                    Kirigami.Separator { Layout.fillWidth: true; Layout.topMargin: Kirigami.Units.smallSpacing }
+
+                    // Shared fallback animation — the slide effect can't look
+                    // up a per-slot style/duration for temp slots (class
+                    // unknown ahead of time), see
+                    // effect/contents/code/main.js header comment.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Controls.Label {
+                            text: qsTr("Shared animation style/duration (their app isn't known in advance):")
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Controls.ComboBox {
+                            Layout.preferredWidth: 100
+                            model: root.styleLabels
+                            currentIndex: {
+                                var idx = root.styleValues.indexOf(root.tempSlotAnimationStyle)
+                                return idx >= 0 ? idx : 0
+                            }
+                            onActivated: function(idx) {
+                                root.tempSlotAnimationStyle = root.styleValues[idx]
+                                dirty = true
+                            }
+                        }
+
+                        Controls.SpinBox {
+                            Layout.preferredWidth: 110
+                            from: 0; to: 9999; stepSize: 10
+                            value: root.tempSlotAnimationDuration
+                            textFromValue: function(v) { return v + " ms" }
+                            onValueModified: {
+                                root.tempSlotAnimationDuration = value
+                                dirty = true
+                            }
+                        }
+                    }
+                    } // end Temporary slots tab
+
+                    // ── Tile pairs tab ───────────────────────────────────────────
+                    ColumnLayout {
                     spacing: 0
 
                     // Column header
@@ -1131,6 +1491,7 @@ Item {
                         text: qsTr("Add tile pair")
                         onClicked: addTile()
                     }
+                    } // end Tile pairs tab
                 }
             }
 
@@ -1165,7 +1526,8 @@ Item {
                             { label: qsTr("Increase height"),                 prop: "resizeHeightIncShortcut" },
                             { label: qsTr("Decrease height"),                 prop: "resizeHeightDecShortcut" },
                             { label: qsTr("Increase width"),                  prop: "resizeWidthIncShortcut" },
-                            { label: qsTr("Decrease width"),                  prop: "resizeWidthDecShortcut" }
+                            { label: qsTr("Decrease width"),                  prop: "resizeWidthDecShortcut" },
+                            { label: qsTr("Release active temp slot"),        prop: "releaseTempSlotShortcut" }
                         ]
                         delegate: RowLayout {
                             spacing: Kirigami.Units.smallSpacing

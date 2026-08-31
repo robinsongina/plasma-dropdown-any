@@ -6,12 +6,38 @@
 // that animates every window's geometry change system-wide.
 //
 // Config (kwinrc, [Effect-plasma-dropdown-any-slide]):
-//   ManagedClasses  "class:Style:DurationMs,class:Style:DurationMs,..."
-//                   triples — both the animation style AND duration are
-//                   chosen PER SLOT (or per tile pair) in the plasmoid, not
-//                   globally here. Written by config-helper.sh on every
-//                   save, kept in sync with the window script's slots and
-//                   tile pairs.
+//   ManagedClasses      "class:Style:DurationMs,class:Style:DurationMs,..."
+//                       triples — both the animation style AND duration are
+//                       chosen PER SLOT (or per tile pair) in the plasmoid,
+//                       not globally here. Written by config-helper.sh on
+//                       every save, kept in sync with the window script's
+//                       slots and tile pairs.
+//   TempSlotStyle       Fallback style for temporary slots (see below).
+//   TempSlotDurationMs  Fallback duration for temporary slots (see below).
+//
+// Temporary slots (window script feature: a slot with no fixed class,
+// bound at runtime to whichever app is focused when triggered) can't be
+// listed in ManagedClasses above — their class isn't known until the
+// window script binds one, and this effect has no way to learn that a
+// posteriori. Instead, any window NOT in ManagedClasses that has
+// skipSwitcher true at the moment its geometry changes is treated as one
+// of ours anyway (the window script always sets it before moving a managed
+// window) and animated with the single shared TempSlotStyle/
+// TempSlotDurationMs pair instead of a per-class one.
+//
+// NOTE: this only checks skipSwitcher, not skipTaskbar/skipPager too, even
+// though the window script sets all three — confirmed against KWin's
+// EffectWindow (effect/effectwindow.h) that skipTaskbar/skipPager simply
+// don't exist as EffectWindow properties (only on the window-script side's
+// Window class), so referencing them here is always undefined/falsy and
+// silently breaks the whole check. skipSwitcher is the only one of the
+// three actually exposed to effects.
+//
+// Trade-off: temporary slots don't get per-slot style control like regular
+// slots do, and in the unlikely case some unrelated window also has
+// skipSwitcher set during its own geometry change, it would get animated
+// too — narrower than the old animate-everything third-party effect this
+// replaced, but not as scoped as the class list.
 //
 // Animation approach adapted from kwin4_effect_geometry_change
 // (Peter Fajdiga, GPLv3): listen for windowFrameGeometryChanged and
@@ -86,10 +112,16 @@ class DropdownSlideEffect {
             this.classConfig.set(cls, { style, duration });
         });
 
+        // Shared fallback for temporary slots — see header comment.
+        const rawTempStyle = effect.readConfig("TempSlotStyle", "Smooth");
+        this.tempSlotStyle = STYLE_NAMES.includes(rawTempStyle) ? rawTempStyle : "Smooth";
+        const rawTempMs = parseInt(effect.readConfig("TempSlotDurationMs", DEFAULT_DURATION_MS), 10);
+        this.tempSlotDuration = animationTime(!isNaN(rawTempMs) && rawTempMs > 0 ? rawTempMs : DEFAULT_DURATION_MS);
+
         console.log("[dropdown-slide effect] loaded config — managedClasses=[" +
             Array.from(this.classConfig.entries())
                 .map(([cls, cfg]) => cls + ":" + cfg.style + ":" + cfg.duration + "ms")
-                .join(", ") + "]");
+                .join(", ") + "], tempSlotFallback=" + this.tempSlotStyle + ":" + this.tempSlotDuration + "ms");
     }
 
     manage(window) {
@@ -116,11 +148,20 @@ class DropdownSlideEffect {
 
     onWindowFrameGeometryChanged(window, oldGeometry) {
         if (!window.dropdownSlideData) return;
-        if (this.classConfig.size === 0) return;
 
+        let style, duration;
         const matchedClass = this.matchClass(window.windowClass);
-        if (!matchedClass) return;
-        const { style, duration } = this.classConfig.get(matchedClass);
+        if (matchedClass) {
+            ({ style, duration } = this.classConfig.get(matchedClass));
+        } else if (window.skipSwitcher) {
+            // Not a pre-registered class — likely a temporary slot's bound
+            // window (see header comment). Use the shared fallback instead
+            // of leaving it unanimated.
+            style = this.tempSlotStyle;
+            duration = this.tempSlotDuration;
+        } else {
+            return; // not one of ours
+        }
 
         // Skip the initial placement right after window creation.
         const windowAgeMs = Date.now() - window.dropdownSlideData.createdTime;
