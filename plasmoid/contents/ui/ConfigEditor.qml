@@ -52,6 +52,7 @@ Item {
     property string resizeWidthIncShortcut:  "Alt+Shift+Right"
     property string resizeWidthDecShortcut:  "Alt+Shift+Left"
     property string releaseTempSlotShortcut: "Meta+Shift+X"
+    property string listShortcutsShortcut:   "Meta+Shift+S"
 
     // Shared fallback animation for temporary slots — the slide effect can't
     // look up a per-slot style/duration for these (class unknown ahead of
@@ -121,6 +122,7 @@ Item {
             resizeWidthIncShortcut  = data.resizeWidthIncShortcut  || "Alt+Shift+Right"
             resizeWidthDecShortcut  = data.resizeWidthDecShortcut  || "Alt+Shift+Left"
             releaseTempSlotShortcut = data.releaseTempSlotShortcut || "Meta+Shift+X"
+            listShortcutsShortcut   = data.listShortcutsShortcut   || "Meta+Shift+S"
             tempSlotAnimationStyle    = data.tempSlotAnimationStyle    || "Smooth"
             tempSlotAnimationDuration = data.tempSlotAnimationDuration !== undefined ? data.tempSlotAnimationDuration : 250
             regularSlotModel.clear()
@@ -397,6 +399,7 @@ Item {
             resizeWidthIncShortcut:  resizeWidthIncShortcut,
             resizeWidthDecShortcut:  resizeWidthDecShortcut,
             releaseTempSlotShortcut: releaseTempSlotShortcut,
+            listShortcutsShortcut:   listShortcutsShortcut,
             tempSlotAnimationStyle:    tempSlotAnimationStyle,
             tempSlotAnimationDuration: tempSlotAnimationDuration
         })
@@ -1554,7 +1557,8 @@ Item {
                             { label: qsTr("Decrease height"),                 prop: "resizeHeightDecShortcut" },
                             { label: qsTr("Increase width"),                  prop: "resizeWidthIncShortcut" },
                             { label: qsTr("Decrease width"),                  prop: "resizeWidthDecShortcut" },
-                            { label: qsTr("Release active temp slot"),        prop: "releaseTempSlotShortcut" }
+                            { label: qsTr("Release active temp slot"),        prop: "releaseTempSlotShortcut" },
+                            { label: qsTr("List slots/tiles + shortcuts"),    prop: "listShortcutsShortcut" }
                         ]
                         delegate: RowLayout {
                             spacing: Kirigami.Units.smallSpacing

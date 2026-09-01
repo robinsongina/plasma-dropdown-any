@@ -512,7 +512,7 @@
         if (cls === "" && !temp) continue;     // empty class only valid for temp slots
 
         var entry = {
-            idx: i, widthPct: wPct, heightPct: hPct, screenTarget: sPct,
+            idx: i, shortcut: sc, widthPct: wPct, heightPct: hPct, screenTarget: sPct,
             opacity: opc, allDesktops: allD, autoHide: aHide, direction: dir,
             keepAbove: kAbove
         };
@@ -619,7 +619,7 @@
 
         var pairId = String(t);
         tileConfig[pairId] = {
-            idx: t, classLeft: tClsL, classRight: tClsR,
+            idx: t, shortcut: tSc, classLeft: tClsL, classRight: tClsR,
             splitPct: tSplit, widthPct: tWPct, heightPct: tHPct, screenTarget: tSPct,
             opacity: tOpc, allDesktops: tAllD, autoHide: tAHide,
             direction: tDir, orientation: tOrient
@@ -704,10 +704,11 @@
         }
     }
 
+    var repeatLastSc = readConfig("repeatLastShortcut", "Meta+Shift+R").trim() || "Meta+Shift+R";
     registerShortcut(
         "DropdownAny-ToggleLast",
         "Dropdown Any: Toggle last activated slot/tile",
-        readConfig("repeatLastShortcut", "Meta+Shift+R").trim() || "Meta+Shift+R",
+        repeatLastSc,
         toggleLastActivated
     );
 
@@ -736,26 +737,79 @@
         dbg(shortcut + " → Release temp slot\nFocused window isn't a bound temp slot");
     }
 
+    var releaseTempSc = readConfig("releaseTempSlotShortcut", "Meta+Shift+X").trim() || "Meta+Shift+X";
     registerShortcut(
         "DropdownAny-ReleaseTempSlot",
         "Dropdown Any: Release active temp slot",
-        readConfig("releaseTempSlotShortcut", "Meta+Shift+X").trim() || "Meta+Shift+X",
+        releaseTempSc,
         function () { releaseActiveTempSlot("Release temp slot"); }
     );
 
     // ── Resize shortcuts ──────────────────────────────────────────────────────
-    registerShortcut("DropdownAny-ResizeHeightInc", "Dropdown: Increase height",
-        readConfig("resizeHeightIncShortcut", "Alt+Shift+Up").trim() || "Alt+Shift+Up",
+    var resizeHeightIncSc = readConfig("resizeHeightIncShortcut", "Alt+Shift+Up").trim() || "Alt+Shift+Up";
+    var resizeHeightDecSc = readConfig("resizeHeightDecShortcut", "Alt+Shift+Down").trim() || "Alt+Shift+Down";
+    var resizeWidthIncSc  = readConfig("resizeWidthIncShortcut", "Alt+Shift+Right").trim() || "Alt+Shift+Right";
+    var resizeWidthDecSc  = readConfig("resizeWidthDecShortcut", "Alt+Shift+Left").trim() || "Alt+Shift+Left";
+    registerShortcut("DropdownAny-ResizeHeightInc", "Dropdown: Increase height", resizeHeightIncSc,
         function () { resizeActive(0,  RESIZE_STEP); });
-    registerShortcut("DropdownAny-ResizeHeightDec", "Dropdown: Decrease height",
-        readConfig("resizeHeightDecShortcut", "Alt+Shift+Down").trim() || "Alt+Shift+Down",
+    registerShortcut("DropdownAny-ResizeHeightDec", "Dropdown: Decrease height", resizeHeightDecSc,
         function () { resizeActive(0, -RESIZE_STEP); });
-    registerShortcut("DropdownAny-ResizeWidthInc",  "Dropdown: Increase width",
-        readConfig("resizeWidthIncShortcut", "Alt+Shift+Right").trim() || "Alt+Shift+Right",
+    registerShortcut("DropdownAny-ResizeWidthInc",  "Dropdown: Increase width",  resizeWidthIncSc,
         function () { resizeActive( RESIZE_STEP, 0); });
-    registerShortcut("DropdownAny-ResizeWidthDec",  "Dropdown: Decrease width",
-        readConfig("resizeWidthDecShortcut", "Alt+Shift+Left").trim() || "Alt+Shift+Left",
+    registerShortcut("DropdownAny-ResizeWidthDec",  "Dropdown: Decrease width",  resizeWidthDecSc,
         function () { resizeActive(-RESIZE_STEP, 0); });
+
+    // ── Shortcuts cheat sheet ─────────────────────────────────────────────────
+    //
+    // OSD listing every configured slot/tile with its shortcut, plus the
+    // fixed global shortcuts — a quick reference without opening the widget.
+    function listConfiguredShortcuts() {
+        var lines = [];
+
+        var slotIdxs = [];
+        for (var key in slotConfig) slotIdxs.push(key);
+        slotIdxs.sort(function (a, b) { return slotConfig[a].idx - slotConfig[b].idx; });
+        slotIdxs.forEach(function (key) {
+            var slot = slotConfig[key];
+            var label = slot.temporary ? "(temporary)" : key;
+            lines.push("Slot " + slot.idx + ": " + label + " → " + slot.shortcut);
+        });
+
+        var tileIds = Object.keys(tileConfig).sort(function (a, b) {
+            return tileConfig[a].idx - tileConfig[b].idx;
+        });
+        tileIds.forEach(function (id) {
+            var tile = tileConfig[id];
+            lines.push("Tile " + tile.idx + ": " +
+                (tile.classLeft || "—") + " | " + (tile.classRight || "—") +
+                " → " + tile.shortcut);
+        });
+
+        lines.push("—");
+        lines.push("List active windows → Meta+Shift+W");
+        lines.push("Repeat last activated → " + repeatLastSc);
+        lines.push("Release active temp slot → " + releaseTempSc);
+        lines.push("Increase height → " + resizeHeightIncSc);
+        lines.push("Decrease height → " + resizeHeightDecSc);
+        lines.push("Increase width → " + resizeWidthIncSc);
+        lines.push("Decrease width → " + resizeWidthDecSc);
+
+        callDBus(
+            "org.kde.plasmashell",
+            "/org/kde/osdService",
+            "org.kde.osdService",
+            "showText",
+            "preferences-desktop-keyboard-shortcuts",
+            lines.join("\n")
+        );
+    }
+
+    registerShortcut(
+        "DropdownAny-ListShortcuts",
+        "Dropdown Any: List configured slots/tiles and global shortcuts",
+        readConfig("listShortcutsShortcut", "Meta+Shift+S").trim() || "Meta+Shift+S",
+        listConfiguredShortcuts
+    );
 
     console.log("[DropdownAny] loaded — " + registered + "/10 slots, " +
                 tilesRegistered + "/10 tile pairs active.");

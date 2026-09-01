@@ -176,6 +176,7 @@ resize_height_dec_shortcut = kread("resizeHeightDecShortcut",  "Alt+Shift+Down")
 resize_width_inc_shortcut  = kread("resizeWidthIncShortcut",   "Alt+Shift+Right")
 resize_width_dec_shortcut  = kread("resizeWidthDecShortcut",   "Alt+Shift+Left")
 release_temp_slot_shortcut = kread("releaseTempSlotShortcut",  "Meta+Shift+X")
+list_shortcuts_shortcut    = kread("listShortcutsShortcut",    "Meta+Shift+S")
 
 # Shared fallback animation for temporary slots — the effect can't look up
 # a per-slot style/duration for these since their class isn't known until
@@ -219,6 +220,7 @@ print(json.dumps({
     "resizeWidthIncShortcut":   resize_width_inc_shortcut,
     "resizeWidthDecShortcut":   resize_width_dec_shortcut,
     "releaseTempSlotShortcut":  release_temp_slot_shortcut,
+    "listShortcutsShortcut":    list_shortcuts_shortcut,
     "tempSlotAnimationStyle":    temp_slot_animation_style,
     "tempSlotAnimationDuration": temp_slot_animation_duration
 }))
@@ -314,6 +316,7 @@ global_shortcuts = {
     "resizeWidthIncShortcut":  ("DropdownAny-ResizeWidthInc",  "Alt+Shift+Right", "Dropdown: Increase width"),
     "resizeWidthDecShortcut":  ("DropdownAny-ResizeWidthDec",  "Alt+Shift+Left", "Dropdown: Decrease width"),
     "releaseTempSlotShortcut": ("DropdownAny-ReleaseTempSlot", "Meta+Shift+X",   "Dropdown Any: Release active temp slot"),
+    "listShortcutsShortcut":   ("DropdownAny-ListShortcuts",  "Meta+Shift+S",   "Dropdown Any: List configured slots/tiles and global shortcuts"),
 }
 for key, (object_name, default_sc, description) in global_shortcuts.items():
     sc = data.get(key, "") or default_sc

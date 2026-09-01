@@ -127,7 +127,9 @@ There's also a **Repeat last activated** shortcut (default `Meta+Shift+R`) that 
 
 There's also **Release active temp slot** (default `Meta+Shift+X`) — see [Temporary slots](#temporary-slots) above.
 
-All six of these are configurable from the widget's **Global shortcuts** section, alongside the per-slot ones.
+**List slots/tiles + shortcuts** (default `Meta+Shift+S`) shows an OSD cheat sheet of every configured slot and tile pair with its shortcut, plus all the global shortcuts below — a quick reference without opening the widget.
+
+All seven of these are configurable from the widget's **Global shortcuts** section, alongside the per-slot ones.
 
 > **Note:** KWin scripting requires all shortcuts to be registered with KDE's global shortcut system (KGlobalAccel). They will also appear in **System Settings → Keyboard → Shortcuts → KWin**. This is a platform limitation — there is no way to have "private" shortcuts in a KWin script.
 
