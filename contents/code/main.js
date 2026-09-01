@@ -168,7 +168,7 @@
     // synthetic "temp:<idx>" key instead, since the real class isn't known
     // until the user triggers it while some window is focused (see
     // toggleWindow). boundClass holds that captured class, or null.
-    var slotConfig = {}; // trackingKey → { idx, widthPct, heightPct, screenTarget, opacity, allDesktops, autoHide, temporary?, boundClass? }
+    var slotConfig = {}; // trackingKey → { idx, widthPct, heightPct, screenTarget, opacity, allDesktops, autoHide, keepAbove, temporary?, boundClass? }
 
     // Resolves a trackingKey to the actual window class to search for.
     // Regular slots: trackingKey already IS the class. Temp slots: the class
@@ -323,9 +323,14 @@
 
         // ── Show ──────────────────────────────────────────────────────────────
 
-        // Always keep the dropdown above other windows and hidden from
-        // taskbar/pager/switcher while we reposition it.
-        win.keepAbove    = true;
+        // Hide from taskbar/pager/switcher while we reposition it — always,
+        // regardless of keepAbove. keepAbove itself is per-slot: if on, the
+        // window stays pinned above everything even after losing focus to
+        // another app (unless autoHide hides it entirely first); if off, it
+        // behaves like a normal window and falls behind whatever gets
+        // focused next — workspace.activeWindow below still raises it once
+        // now, for this show.
+        win.keepAbove    = slot.keepAbove;
         win.skipTaskbar  = true;
         win.skipPager    = true;
         win.skipSwitcher = true;
@@ -501,13 +506,15 @@
         var aHide = readConfig("autoHide"      + i, false);
         var dir   = readConfig("direction"     + i, "top").trim() || "top";
         var temp  = readConfig("temporary"     + i, false);
+        var kAbove = readConfig("keepAbove"    + i, true);
 
         if (sc === "") continue;               // no shortcut → unusable regardless
         if (cls === "" && !temp) continue;     // empty class only valid for temp slots
 
         var entry = {
             idx: i, widthPct: wPct, heightPct: hPct, screenTarget: sPct,
-            opacity: opc, allDesktops: allD, autoHide: aHide, direction: dir
+            opacity: opc, allDesktops: allD, autoHide: aHide, direction: dir,
+            keepAbove: kAbove
         };
 
         // ── Temporary slot: no fixed class — binds to whatever window is

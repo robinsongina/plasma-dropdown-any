@@ -138,6 +138,7 @@ Item {
                     opacity:       s.opacity       !== undefined ? s.opacity       : 100,
                     allDesktops:   s.allDesktops   !== undefined ? s.allDesktops   : false,
                     autoHide:      s.autoHide      !== undefined ? s.autoHide      : false,
+                    keepAbove:     s.keepAbove     !== undefined ? s.keepAbove     : true,
                     direction:     s.direction     || "top",
                     animationStyle: s.animationStyle || "Smooth",
                     animationDuration: s.animationDuration !== undefined ? s.animationDuration : 250
@@ -252,7 +253,7 @@ Item {
             windowClass: "", shortcut: "",
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
-            allDesktops: false, autoHide: false,
+            allDesktops: false, autoHide: false, keepAbove: true,
             direction: "top", animationStyle: "Smooth", animationDuration: 250
         })
         dirty = true
@@ -263,7 +264,7 @@ Item {
             windowClass: cls, shortcut: "",
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
-            allDesktops: false, autoHide: false,
+            allDesktops: false, autoHide: false, keepAbove: true,
             direction: "top", animationStyle: "Smooth", animationDuration: 250
         })
         dirty = true
@@ -283,7 +284,7 @@ Item {
             shortcut: "",
             widthPercent: 100, heightPercent: 50,
             screenTarget: 0, opacity: 100,
-            allDesktops: false, autoHide: false,
+            allDesktops: false, autoHide: false, keepAbove: true,
             direction: "top", animationStyle: "Smooth", animationDuration: 250
         })
         dirty = true
@@ -339,6 +340,7 @@ Item {
                 opacity:       s.opacity,
                 allDesktops:   s.allDesktops,
                 autoHide:      s.autoHide,
+                keepAbove:     s.keepAbove,
                 direction:     s.direction,
                 animationStyle: s.animationStyle,
                 animationDuration: s.animationDuration,
@@ -356,6 +358,7 @@ Item {
                 opacity:       ts.opacity,
                 allDesktops:   ts.allDesktops,
                 autoHide:      ts.autoHide,
+                keepAbove:     ts.keepAbove,
                 direction:     ts.direction,
                 animationStyle: ts.animationStyle,
                 animationDuration: ts.animationDuration,
@@ -817,6 +820,18 @@ Item {
                                         dirty = true
                                     }
                                 }
+
+                                Controls.CheckBox {
+                                    text: qsTr("Keep above other windows")
+                                    checked: model.keepAbove !== false
+                                    Controls.ToolTip.text: qsTr("When focus moves to another app: checked keeps this dropdown floating on top; unchecked lets it fall behind like a normal window. Only matters while it's shown and auto-hide isn't hiding it.")
+                                    Controls.ToolTip.visible: hovered
+                                    Controls.ToolTip.delay: 500
+                                    onToggled: {
+                                        regularSlotModel.set(slotRow.slotIdx, { keepAbove: checked })
+                                        dirty = true
+                                    }
+                                }
                             }
 
                             // Duplicate shortcut warning (checked against both
@@ -1052,6 +1067,18 @@ Item {
                                     checked: model.autoHide
                                     onToggled: {
                                         tempSlotModel.set(tempSlotRow.slotIdx, { autoHide: checked })
+                                        dirty = true
+                                    }
+                                }
+
+                                Controls.CheckBox {
+                                    text: qsTr("Keep above other windows")
+                                    checked: model.keepAbove !== false
+                                    Controls.ToolTip.text: qsTr("When focus moves to another app: checked keeps this dropdown floating on top; unchecked lets it fall behind like a normal window. Only matters while it's shown and auto-hide isn't hiding it.")
+                                    Controls.ToolTip.visible: hovered
+                                    Controls.ToolTip.delay: 500
+                                    onToggled: {
+                                        tempSlotModel.set(tempSlotRow.slotIdx, { keepAbove: checked })
                                         dirty = true
                                     }
                                 }

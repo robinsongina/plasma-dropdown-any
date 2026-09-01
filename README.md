@@ -89,6 +89,7 @@ Each slot is configured independently with the following fields:
 | Opacity % | Window alpha on show (0–100) | `90` |
 | All workspaces | Pin the window to all virtual desktops | ✓ |
 | Auto-hide on focus loss | Hide automatically when the window loses focus | ✓ |
+| Keep above other windows | Stay floating on top when focus moves to another app; unchecked, it falls behind like a normal window instead. Only matters while shown and not hidden by auto-hide. Default: on | ✓ |
 
 The **Temporary slots** tab has every field above except Window class — see below.
 

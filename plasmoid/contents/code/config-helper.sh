@@ -135,6 +135,7 @@ if slot_count >= 0:
             "opacity":       to_int(kread(f"opacity{n}",       "100"), 100),
             "allDesktops":   kread(f"allDesktops{n}", "false") == "true",
             "autoHide":      kread(f"autoHide{n}",    "false") == "true",
+            "keepAbove":     kread(f"keepAbove{n}",   "true")  == "true",
             "direction":     kread(f"direction{n}",   "top"),
             "animationStyle": kread(f"animationStyle{n}", "Smooth"),
             "animationDuration": to_int(kread(f"animationDuration{n}", "250"), 250),
@@ -157,6 +158,7 @@ else:
             "opacity":       to_int(kread(f"opacity{n}",       "100"), 100),
             "allDesktops":   kread(f"allDesktops{n}", "false") == "true",
             "autoHide":      kread(f"autoHide{n}",    "false") == "true",
+            "keepAbove":     kread(f"keepAbove{n}",   "true")  == "true",
             "direction":     kread(f"direction{n}",   "top"),
             "animationStyle": kread(f"animationStyle{n}", "Smooth"),
             "animationDuration": to_int(kread(f"animationDuration{n}", "250"), 250),
@@ -346,6 +348,7 @@ for i, slot in enumerate(slots, 1):
     opacity = str(slot.get("opacity",       100))
     all_d   = "true" if slot.get("allDesktops", False) else "false"
     auto_h  = "true" if slot.get("autoHide",    False) else "false"
+    keep_above = "true" if slot.get("keepAbove", True) else "false"
     direction = slot.get("direction", "top") or "top"
     anim_style = slot.get("animationStyle", "Smooth") or "Smooth"
     anim_duration = str(slot.get("animationDuration", 250))
@@ -360,6 +363,8 @@ for i, slot in enumerate(slots, 1):
            "--type", "bool", all_d)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"autoHide{n}",
            "--type", "bool", auto_h)
+    kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"keepAbove{n}",
+           "--type", "bool", keep_above)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"direction{n}", direction)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"animationStyle{n}", anim_style)
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", f"animationDuration{n}", anim_duration)
@@ -383,8 +388,8 @@ for i, slot in enumerate(slots, 1):
 for i in range(count + 1, 21):
     n = str(i)
     for key in ["windowClass", "shortcut", "widthPercent", "heightPercent",
-                "screenTarget", "opacity", "allDesktops", "autoHide", "direction",
-                "animationStyle", "animationDuration", "temporary"]:
+                "screenTarget", "opacity", "allDesktops", "autoHide", "keepAbove",
+                "direction", "animationStyle", "animationDuration", "temporary"]:
         subprocess.run(
             ["kwriteconfig6", "--file", "kwinrc", "--group", kwin_group,
              "--key", f"{key}{n}", "--delete"],
