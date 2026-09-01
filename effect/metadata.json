@@ -1,25 +1,25 @@
 {
-    "KPackageStructure": "KWin/Effect",
-    "KPlugin": {
-        "Authors": [
-            {
-                "Email": "rgn159@gmail.com",
-                "Name": "rgiraldo"
-            }
-        ],
-        "Category": "Appearance",
-        "Description": "Slide animation for windows managed by the Dropdown Any Window KWin script — scoped to those windows only, unlike a generic geometry-change effect",
-        "Id": "plasma-dropdown-any-slide",
-        "License": "GPL-2.0-or-later",
-        "Name": "Dropdown Any — Slide",
-        "Version": "1.0.0",
-        "EnabledByDefault": false,
-        "ServiceTypes": ["KWin/Effect"]
-    },
-    "X-KDE-ConfigModule": "kcm_kwin4_genericscripted",
-    "X-KDE-Ordering": "60",
-    "X-KDE-PluginKeyword": "plasma-dropdown-any-slide",
-    "X-KWin-Config-TranslationDomain": "kwin_effects",
-    "X-Plasma-API": "javascript",
-    "X-Plasma-MainScript": "code/main.js"
+  "KPackageStructure": "KWin/Effect",
+  "KPlugin": {
+    "Authors": [
+      {
+        "Email": "rgn159@gmail.com",
+        "Name": "Robinson Giraldo Naranjo"
+      }
+    ],
+    "Category": "Appearance",
+    "Description": "Slide animation for windows managed by the Dropdown Any Window.",
+    "Id": "plasma-dropdown-any-slide",
+    "License": "GPL-2.0-or-later",
+    "Name": "Dropdown Any — Effect",
+    "Version": "1.0.0",
+    "EnabledByDefault": false,
+    "ServiceTypes": ["KWin/Effect"]
+  },
+  "X-KDE-ConfigModule": "kcm_kwin4_genericscripted",
+  "X-KDE-Ordering": "60",
+  "X-KDE-PluginKeyword": "plasma-dropdown-any-slide",
+  "X-KWin-Config-TranslationDomain": "kwin_effects",
+  "X-Plasma-API": "javascript",
+  "X-Plasma-MainScript": "code/main.js"
 }
