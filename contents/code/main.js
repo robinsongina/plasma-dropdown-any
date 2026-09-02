@@ -56,10 +56,11 @@
         return workspace.activeScreen;
     }
 
-    // direction: "top" (default), "bottom", "left", or "right" — which screen
-    // edge a box of size w×h is anchored to within area. The perpendicular
-    // axis is centered (e.g. "left" centers vertically; "top" centers
-    // horizontally). Shared by applyDropdownGeometry and applyTileGeometry.
+    // direction: "top" (default), "bottom", "left", "right", or "center" —
+    // which screen edge a box of size w×h is anchored to within area. The
+    // perpendicular axis is centered (e.g. "left" centers vertically; "top"
+    // centers horizontally). "center" centers on both axes — no edge.
+    // Shared by applyDropdownGeometry and applyTileGeometry.
     function anchoredPosition(area, w, h, direction) {
         switch (direction) {
             case "bottom":
@@ -68,6 +69,8 @@
                 return { x: area.x, y: area.y + Math.round((area.height - h) / 2) };
             case "right":
                 return { x: area.x + area.width - w, y: area.y + Math.round((area.height - h) / 2) };
+            case "center":
+                return { x: area.x + Math.round((area.width - w) / 2), y: area.y + Math.round((area.height - h) / 2) };
             case "top":
             default:
                 return { x: area.x + Math.round((area.width - w) / 2), y: area.y };
@@ -240,6 +243,7 @@
             case "left":   offX = bounds.x - g.width;       break;
             case "right":  offX = bounds.x + bounds.width;  break;
             case "top":
+            case "center": // no dedicated edge — reuse top's push
             default:       offY = bounds.y - g.height;      break;
         }
 

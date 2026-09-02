@@ -70,8 +70,8 @@ Item {
     }
 
     // Edge the dropdown slides in from/out to. Index-aligned with directionValues.
-    readonly property var directionValues: ["top", "bottom", "left", "right"]
-    readonly property var directionLabels: [qsTr("Top"), qsTr("Bottom"), qsTr("Left"), qsTr("Right")]
+    readonly property var directionValues: ["top", "bottom", "left", "right", "center"]
+    readonly property var directionLabels: [qsTr("Top"), qsTr("Bottom"), qsTr("Left"), qsTr("Right"), qsTr("Center")]
 
     // Per-slot animation style, matching effect/contents/code/main.js's
     // CURVE_NAMES exactly (index-aligned isn't required here since the
