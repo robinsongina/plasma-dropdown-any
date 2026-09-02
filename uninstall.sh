@@ -6,30 +6,60 @@ EFFECT_ID="plasma-dropdown-any-slide"
 PLASMOID_ID="org.kde.plasma.dropdownany"
 KWIN_GROUP="Script-plasma-dropdown-any"
 
-# ── Clean up shortcuts from kglobalshortcutsrc ────────────────────────────────
-echo "→ Removing shortcuts from kglobalshortcutsrc…"
-slot_count=$(kreadconfig6 --file kwinrc --group "$KWIN_GROUP" --key slotCount 2>/dev/null || echo 0)
-[[ "$slot_count" =~ ^[0-9]+$ ]] || slot_count=0
+usage() {
+    cat >&2 <<'EOF'
+Usage: uninstall.sh [--keep-config]
 
-for i in $(seq 1 "$slot_count"); do
-    cls=$(kreadconfig6 --file kwinrc --group "$KWIN_GROUP" --key "windowClass${i}" 2>/dev/null || true)
-    if [[ -n "$cls" ]]; then
-        kwriteconfig6 --file kglobalshortcutsrc --group kwin \
-            --key "DropdownAny-${cls}" --delete 2>/dev/null || true
-        echo "  Removed shortcut: DropdownAny-${cls}"
-    fi
+Removes the installed packages (KWin script, Plasma widget, KWin effect).
+
+By default also wipes your slot/tile config: the [Script-plasma-dropdown-any]
+and [Effect-plasma-dropdown-any-slide] groups in kwinrc, and this plugin's
+entries in kglobalshortcutsrc.
+
+  --keep-config   Skip that config wipe — only remove the packages. Use this
+                   for "uninstall.sh --keep-config && install.sh" to
+                   reinstall/upgrade without losing your configured slots.
+EOF
+    exit 1
+}
+
+keep_config=false
+for arg in "$@"; do
+    case "$arg" in
+        --keep-config) keep_config=true ;;
+        -h|--help)     usage ;;
+        *)
+            echo "ERROR: unknown option '$arg'" >&2
+            usage
+            ;;
+    esac
 done
 
-# Also clean up the resize / utility shortcuts registered by the script
-for key in DropdownAny-ListWindows DropdownAny-ResizeHeightInc DropdownAny-ResizeHeightDec \
-           DropdownAny-ResizeWidthInc DropdownAny-ResizeWidthDec; do
-    kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "$key" --delete 2>/dev/null || true
-done
+if ! $keep_config; then
+    # ── Clean up shortcuts from kglobalshortcutsrc ────────────────────────────
+    echo "→ Removing shortcuts from kglobalshortcutsrc…"
+    slot_count=$(kreadconfig6 --file kwinrc --group "$KWIN_GROUP" --key slotCount 2>/dev/null || echo 0)
+    [[ "$slot_count" =~ ^[0-9]+$ ]] || slot_count=0
 
-# ── Remove script config group from kwinrc ────────────────────────────────────
-echo "→ Removing script config from kwinrc…"
-if command -v python3 &>/dev/null; then
-    python3 << 'PYEOF'
+    for i in $(seq 1 "$slot_count"); do
+        cls=$(kreadconfig6 --file kwinrc --group "$KWIN_GROUP" --key "windowClass${i}" 2>/dev/null || true)
+        if [[ -n "$cls" ]]; then
+            kwriteconfig6 --file kglobalshortcutsrc --group kwin \
+                --key "DropdownAny-${cls}" --delete 2>/dev/null || true
+            echo "  Removed shortcut: DropdownAny-${cls}"
+        fi
+    done
+
+    # Also clean up the resize / utility shortcuts registered by the script
+    for key in DropdownAny-ListWindows DropdownAny-ResizeHeightInc DropdownAny-ResizeHeightDec \
+               DropdownAny-ResizeWidthInc DropdownAny-ResizeWidthDec; do
+        kwriteconfig6 --file kglobalshortcutsrc --group kwin --key "$key" --delete 2>/dev/null || true
+    done
+
+    # ── Remove script config group from kwinrc ────────────────────────────────
+    echo "→ Removing script config from kwinrc…"
+    if command -v python3 &>/dev/null; then
+        python3 << 'PYEOF'
 import configparser, os, sys
 path = os.path.expanduser("~/.config/kwinrc")
 cfg = configparser.RawConfigParser()
@@ -45,6 +75,9 @@ if changed:
     with open(path, "w") as f:
         cfg.write(f, space_around_delimiters=False)
 PYEOF
+    fi
+else
+    echo "→ --keep-config: leaving kwinrc and kglobalshortcutsrc untouched."
 fi
 
 # ── Remove packages ───────────────────────────────────────────────────────────
@@ -58,6 +91,8 @@ echo "→ Removing KWin effect package…"
 kpackagetool6 --type KWin/Effect --remove "$EFFECT_ID" 2>/dev/null && echo "  Done." || echo "  Not installed."
 
 # ── Disable in kwinrc and reload KWin ────────────────────────────────────────
+# Harmless either way with --keep-config: install.sh re-enables whatever
+# components you pass it right after.
 kwriteconfig6 --file kwinrc --group Plugins --key "${SCRIPT_ID}Enabled" false
 kwriteconfig6 --file kwinrc --group Plugins --key "${EFFECT_ID}Enabled" false
 qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || \
@@ -65,4 +100,8 @@ qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || \
     qdbus org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
 
 echo ""
-echo "Uninstalled $SCRIPT_ID."
+if $keep_config; then
+    echo "Uninstalled $SCRIPT_ID (config kept — run install.sh to reinstall with your existing slots)."
+else
+    echo "Uninstalled $SCRIPT_ID."
+fi

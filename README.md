@@ -294,6 +294,15 @@ bash uninstall.sh
 bash install.sh
 ```
 
+`uninstall.sh` also wipes your slot/tile config (`kwinrc`'s `[Script-plasma-dropdown-any]` and `[Effect-plasma-dropdown-any-slide]` groups, plus this plugin's `kglobalshortcutsrc` entries) by default. To reinstall/upgrade without losing your configured slots, keep it:
+
+```bash
+bash uninstall.sh --keep-config
+bash install.sh
+```
+
+Note this is only relevant to `uninstall.sh` — plain `bash install.sh` (upgrading in place, the normal workflow after a code change) never touches your config; it only replaces the package files and re-enables the plugins.
+
 ---
 
 ## Known Plasma 6 gotchas
@@ -318,3 +327,5 @@ bash install.sh
 ```bash
 bash uninstall.sh
 ```
+
+Removes the packages and wipes your slot/tile config. Pass `--keep-config` to remove only the packages and leave your configured slots in `kwinrc` alone (useful for reinstalling — see [Reinstall from scratch](#7-reinstall-from-scratch)).
