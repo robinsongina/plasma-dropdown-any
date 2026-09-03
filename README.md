@@ -104,7 +104,9 @@ A regular slot (Slots tab) always toggles the same window class. A **temporary s
 
 The binding lives only in the running KWin script (never written to `kwinrc`), so it doesn't survive a script reload — you rebind by triggering the shortcut again.
 
-**Releasing without closing the app:** a single global shortcut, **Release active temp slot** (default `Meta+Shift+X`, configurable in **Global shortcuts** alongside Repeat last activated and the resize shortcuts), un-binds whichever temp slot the currently focused window belongs to — without closing the app — restoring the window to normal if it was currently hidden. That slot goes back to empty and is ready to bind to a different app on its next trigger.
+**Releasing without closing the app:** a single global shortcut, **Release active temp slot** (default `Meta+Shift+X`, configurable in **Global shortcuts** alongside Repeat last activated and the resize shortcuts), un-binds whichever temp slot's window is currently focused/active — without closing the app — restoring the window to normal if it was currently hidden. That slot goes back to empty and is ready to bind to a different app on its next trigger. With several temp slots bound at once, this targets only the one that's currently active — show it first (its own toggle shortcut) if it isn't already.
+
+Binding and releasing a temp slot each show a brief OSD confirmation (e.g. "Temp slot 1 bound to konsole" / "Temp slot 1 released (konsole)") — regular show/hide toggles don't, to stay unobtrusive.
 
 **Animation:** since a temporary slot's class isn't known ahead of time, it can't get a per-slot style/duration like regular slots do. Instead, all temporary slots share one fallback style/duration, set at the bottom of the **Temporary slots** tab (separate from each regular slot's own Style/Duration fields). The bundled slide effect recognizes a temporary slot's window by behavior — it always has `skipSwitcher` set while being moved (the only one of `skipTaskbar`/`skipPager`/`skipSwitcher` actually exposed to KWin effects) — rather than by a pre-registered class list.
 

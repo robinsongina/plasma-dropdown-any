@@ -143,6 +143,21 @@
         );
     }
 
+    // Always-visible OSD, independent of debugMode — used for temp slot
+    // bind/release events specifically (not regular toggles, which stay
+    // debug-only via dbg() above).
+    function osdNotify(icon, msg) {
+        console.log("[DropdownAny] " + msg);
+        callDBus(
+            "org.kde.plasmashell",
+            "/org/kde/osdService",
+            "org.kde.osdService",
+            "showText",
+            icon,
+            msg
+        );
+    }
+
     // ── Hidden-windows tracker ────────────────────────────────────────────────
     //
     // Stores the on-screen geometry for each window we've moved off-screen.
@@ -303,7 +318,7 @@
                 return;
             }
             slot.boundClass = activeWin.resourceClass;
-            dbg(shortcut + " → temp slot " + slot.idx + "\nBound to " + slot.boundClass);
+            osdNotify("emblem-pin", "Temp slot " + slot.idx + " bound to " + slot.boundClass);
         }
 
         var cls = resolveClass(trackingKey);
@@ -404,7 +419,7 @@
         delete hiddenWindows[trackingKey];
         slot.boundClass = null;
 
-        dbg(shortcut + " → temp slot " + slot.idx + "\nReleased " + releasedClass);
+        osdNotify("edit-clear", "Temp slot " + slot.idx + " released (" + releasedClass + ")");
     }
 
     // ── Tile toggle ───────────────────────────────────────────────────────────
@@ -719,26 +734,27 @@
     // ── Release active temp slot ─────────────────────────────────────────────
     //
     // One global shortcut instead of one per temp slot — releases whichever
-    // temp slot the currently focused window is bound to (a shown dropdown
-    // is always the focused window right after showing, see toggleWindow),
-    // freeing that slot for a different app next. No-op if the focused
-    // window isn't a bound temp slot.
+    // bound temp slot's window is currently focused. Deliberately strict:
+    // with several temp slots bound at once, a fuzzy "last touched" fallback
+    // would be ambiguous (releasing whichever you interacted with most
+    // recently, not necessarily the one you meant). Show the one you want
+    // released first (its own toggle shortcut), then press this — same as
+    // any other action that targets "the active dropdown".
     function releaseActiveTempSlot(shortcut) {
         var win = workspace.activeWindow;
-        if (!win) {
-            dbg(shortcut + " → Release temp slot\nNo focused window");
-            return;
-        }
-        var lc = win.resourceClass.toLowerCase();
-        for (var key in slotConfig) {
-            var slot = slotConfig[key];
-            if (!slot.temporary || !slot.boundClass) continue;
-            if (slot.boundClass.toLowerCase() === lc) {
-                releaseTempSlot(key, shortcut);
-                return;
+        if (win) {
+            var lc = win.resourceClass.toLowerCase();
+            for (var key in slotConfig) {
+                var slot = slotConfig[key];
+                if (!slot.temporary || !slot.boundClass) continue;
+                if (slot.boundClass.toLowerCase() === lc) {
+                    releaseTempSlot(key, shortcut);
+                    return;
+                }
             }
         }
-        dbg(shortcut + " → Release temp slot\nFocused window isn't a bound temp slot");
+
+        dbg(shortcut + " → Release temp slot\nNo bound temp slot found (focused window isn't one, and none was recently toggled)");
     }
 
     var releaseTempSc = readConfig("releaseTempSlotShortcut", "Meta+Shift+X").trim() || "Meta+Shift+X";
