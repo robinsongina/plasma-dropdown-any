@@ -1,0 +1,45 @@
+# OpenSpec / SDD configuration — app-quake (plasma-dropdown-any)
+#
+# KWin script for Plasma 6 that turns any window into a Yakuake-style dropdown
+# panel, toggled by window class + configurable global shortcut.
+#
+# Shipment shape:
+#   - contents/code/main.js        KWin scripting API (JavaScript)
+#   - plasmoid/contents/           Plasma widget settings UI (QML)
+#   - kcm/                         System Settings module (C++/Qt)
+#   - effect/                      Slide animation hooks (geometry-change effect)
+#
+# Verification is manual (kpackagetool6 install + `kwin6 --replace` smoke test
+# via install.sh/configure); there is no formal unit/E2E test suite.
+
+project: app-quake
+repository: https://github.com/robinsongina/plasma-dropdown-any.git
+description: >
+  plasma-dropdown-any — KWin script turning any window (by resourceClass) into
+  a Yakuake-style dropdown panel. Stack: JavaScript (KWin scripting), QML
+  (plasmoid settings UI), C++ (KCM), optional slide via geometry-change effect.
+  No formal test suite; verification is manual.
+
+openSpec:
+  strict_tdd: true
+  phases:
+    - id: explore
+    - id: proposal
+      requires: [explore]
+    - id: spec
+      requires: [proposal]
+    - id: design
+      requires: [spec]
+    - id: tasks
+      requires: [design]
+    - id: apply
+      requires: [tasks]
+    - id: verify
+      requires: [apply]
+  testing:
+    enabled: false
+    runner: ""
+    description: >
+      No formal test runner. Manual smoke test: bash -n on shell scripts,
+      kpackagetool6 install of KWin/Script + Plasma/Applet packages, then
+      reload KWin and toggle the dropdown shortcut.

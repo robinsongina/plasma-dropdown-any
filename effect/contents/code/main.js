@@ -1,5 +1,3 @@
-"use strict";
-
 // plasma-dropdown-any-slide — KWin effect that animates show/hide ONLY for
 // windows managed by the plasma-dropdown-any KWin script, instead of
 // depending on a generic third-party effect (kwin4_effect_geometry_change)
@@ -73,15 +71,19 @@
 // onWindowFrameGeometryChanged).
 const STYLE_NAMES = ["Smooth", "Elastic", "Bounce", "Back", "Linear", "Flip3D"];
 const STYLE_CURVES = {
-    Smooth:  QEasingCurve.OutExpo,
+    Smooth: QEasingCurve.OutExpo,
     Elastic: QEasingCurve.OutElastic,
-    Bounce:  QEasingCurve.OutBounce,
-    Back:    QEasingCurve.OutBack,
-    Linear:  QEasingCurve.Linear,
-    Flip3D:  QEasingCurve.OutExpo,
+    Bounce: QEasingCurve.OutBounce,
+    Back: QEasingCurve.OutBack,
+    Linear: QEasingCurve.Linear,
+    Flip3D: QEasingCurve.OutExpo,
 };
 
 const DEFAULT_DURATION_MS = 250;
+
+// Hover-to-expand constants (see DropdownSlideEffect.hoverCheck below):
+const HOVER_DEBOUNCE_MS = 300;
+const HOVER_TOLERANCE_PX = 2;
 
 class DropdownSlideEffect {
     constructor() {
@@ -92,49 +94,114 @@ class DropdownSlideEffect {
         effects.windowAdded.connect(manageFn);
         effects.stackingOrder.forEach(manageFn);
 
+        // Hover-to-expand state
+        this.hoverLastWindow = null;
+        this.hoverLastTime = 0;
+        this.setupHover();
+
         this.loadConfig();
+    }
+
+    setupHover() {
+        try {
+            if (
+                typeof effects.mouseChanged !== "undefined" &&
+                effects.mouseChanged &&
+                typeof effects.mouseChanged.connect === "function"
+            ) {
+                effects.mouseChanged.connect((pos) => {
+                    try {
+                        this.hoverCheck(pos);
+                    } catch (err) {
+                        console.log(
+                            "[dropdown-slide effect] hover error: " + err,
+                        );
+                    }
+                });
+                console.log(
+                    "[dropdown-slide effect] hover enabled (mouseChanged)",
+                );
+            } else {
+                console.log(
+                    "[dropdown-slide effect] mouseChanged unavailable — hover disabled",
+                );
+            }
+        } catch (err) {
+            console.log("[dropdown-slide effect] hover setup failed: " + err);
+        }
     }
 
     loadConfig() {
         // "class:Style:DurationMs" triples, one per managed window class.
         const raw = effect.readConfig("ManagedClasses", "");
         this.classConfig = new Map(); // cls → { style, duration }
-        raw.split(",").forEach(entry => {
+        raw.split(",").forEach((entry) => {
             const trimmed = entry.trim();
             if (!trimmed) return;
             const parts = trimmed.split(":");
-            const cls   = (parts[0] || "").trim().toLowerCase();
+            const cls = (parts[0] || "").trim().toLowerCase();
             if (!cls) return;
             const rawStyle = (parts[1] || "").trim();
-            const style    = STYLE_NAMES.includes(rawStyle) ? rawStyle : "Smooth";
-            const rawMs    = parseInt(parts[2], 10);
-            const duration = animationTime(!isNaN(rawMs) && rawMs > 0 ? rawMs : DEFAULT_DURATION_MS);
+            const style = STYLE_NAMES.includes(rawStyle) ? rawStyle : "Smooth";
+            const rawMs = parseInt(parts[2], 10);
+            const duration = animationTime(
+                !isNaN(rawMs) && rawMs > 0 ? rawMs : DEFAULT_DURATION_MS,
+            );
             this.classConfig.set(cls, { style, duration });
         });
 
         // Shared fallback for temporary slots — see header comment.
         const rawTempStyle = effect.readConfig("TempSlotStyle", "Smooth");
-        this.tempSlotStyle = STYLE_NAMES.includes(rawTempStyle) ? rawTempStyle : "Smooth";
-        const rawTempMs = parseInt(effect.readConfig("TempSlotDurationMs", DEFAULT_DURATION_MS), 10);
-        this.tempSlotDuration = animationTime(!isNaN(rawTempMs) && rawTempMs > 0 ? rawTempMs : DEFAULT_DURATION_MS);
+        this.tempSlotStyle = STYLE_NAMES.includes(rawTempStyle)
+            ? rawTempStyle
+            : "Smooth";
+        const rawTempMs = parseInt(
+            effect.readConfig("TempSlotDurationMs", DEFAULT_DURATION_MS),
+            10,
+        );
+        this.tempSlotDuration = animationTime(
+            !isNaN(rawTempMs) && rawTempMs > 0
+                ? rawTempMs
+                : DEFAULT_DURATION_MS,
+        );
 
-        console.log("[dropdown-slide effect] loaded config — managedClasses=[" +
-            Array.from(this.classConfig.entries())
-                .map(([cls, cfg]) => cls + ":" + cfg.style + ":" + cfg.duration + "ms")
-                .join(", ") + "], tempSlotFallback=" + this.tempSlotStyle + ":" + this.tempSlotDuration + "ms");
+        const rawOffset = parseInt(effect.readConfig("dockOffsetPx", 24), 10);
+        this.dockOffsetPx = isNaN(rawOffset) ? 24 : Math.max(1, rawOffset);
+
+        console.log(
+            "[dropdown-slide effect] loaded config — managedClasses=[" +
+                Array.from(this.classConfig.entries())
+                    .map(
+                        ([cls, cfg]) =>
+                            cls + ":" + cfg.style + ":" + cfg.duration + "ms",
+                    )
+                    .join(", ") +
+                "], tempSlotFallback=" +
+                this.tempSlotStyle +
+                ":" +
+                this.tempSlotDuration +
+                "ms" +
+                ", dockOffsetPx=" +
+                this.dockOffsetPx,
+        );
     }
 
     manage(window) {
-        window.dropdownSlideData = { createdTime: Date.now(), animationInstances: 0 };
+        window.dropdownSlideData = {
+            createdTime: Date.now(),
+            animationInstances: 0,
+        };
         window.windowFrameGeometryChanged.connect(
-            this.onWindowFrameGeometryChanged.bind(this)
+            this.onWindowFrameGeometryChanged.bind(this),
         );
     }
 
     // Returns the matched class key from classConfig (window.windowClass is
     // a space-separated "resourceClass resourceName"-style string), or null.
     matchClass(windowClass) {
-        const parts = String(windowClass || "").toLowerCase().split(" ");
+        const parts = String(windowClass || "")
+            .toLowerCase()
+            .split(" ");
         for (const part of parts) {
             if (this.classConfig.has(part)) return part;
         }
@@ -172,11 +239,16 @@ class DropdownSlideEffect {
         const yDelta = newGeometry.y - oldGeometry.y;
         const widthDelta = newGeometry.width - oldGeometry.width;
         const heightDelta = newGeometry.height - oldGeometry.height;
-        if (xDelta === 0 && yDelta === 0 && widthDelta === 0 && heightDelta === 0) {
+        if (
+            xDelta === 0 &&
+            yDelta === 0 &&
+            widthDelta === 0 &&
+            heightDelta === 0
+        ) {
             return;
         }
 
-        const widthRatio  = oldGeometry.width  / newGeometry.width;
+        const widthRatio = oldGeometry.width / newGeometry.width;
         const heightRatio = oldGeometry.height / newGeometry.height;
 
         const animations = [
@@ -212,6 +284,81 @@ class DropdownSlideEffect {
             curve: STYLE_CURVES[style] || STYLE_CURVES.Smooth,
             animations: animations,
         });
+    }
+
+    parkedEdge(window) {
+        const wg = window.geometry;
+        const screen = window.screen;
+        if (!wg || !screen) return "";
+        const sg = screen.geometry;
+        if (!sg) return "";
+        const o = this.dockOffsetPx;
+        if (Math.abs(wg.x + wg.width - (sg.x + o)) <= HOVER_TOLERANCE_PX)
+            return "left";
+        if (Math.abs(wg.x - (sg.x + sg.width - o)) <= HOVER_TOLERANCE_PX)
+            return "right";
+        return "";
+    }
+
+    sliverRect(window, edge) {
+        const wg = window.geometry;
+        const sg = window.screen.geometry;
+        const o = this.dockOffsetPx;
+        return edge === "left"
+            ? { x: sg.x, y: wg.y, width: o, height: wg.height }
+            : { x: sg.x + sg.width - o, y: wg.y, width: o, height: wg.height };
+    }
+
+    windowAtSliver(pos) {
+        const px = pos.x;
+        const py = pos.y;
+        for (const w of effects.stackingOrder) {
+            if (!w.dropdownSlideData) continue;
+            const edge = this.parkedEdge(w);
+            if (!edge) continue;
+            const rect = this.sliverRect(w, edge);
+            if (
+                px >= rect.x &&
+                px < rect.x + rect.width &&
+                py >= rect.y &&
+                py < rect.y + rect.height
+            )
+                return w;
+        }
+        return null;
+    }
+
+    hoverCheck(pos) {
+        if (!pos || typeof pos.x !== "number" || typeof pos.y !== "number")
+            return;
+        const target = this.windowAtSliver(pos);
+        if (!target || target === effects.activeWindow) return;
+        const now = Date.now();
+        if (
+            target === this.hoverLastWindow &&
+            now - this.hoverLastTime < HOVER_DEBOUNCE_MS
+        )
+            return;
+        try {
+            effects.activeWindow = target;
+        } catch (e) {
+            void e;
+            try {
+                if (typeof effects.activateWindow === "function")
+                    effects.activateWindow(target);
+                else return;
+            } catch (_e2) {
+                void _e2;
+                return;
+            }
+        }
+        this.hoverLastWindow = target;
+        this.hoverLastTime = now;
+        console.log(
+            "[dropdown-slide effect] hover → " +
+                target.windowClass +
+                " sliver activated",
+        );
     }
 }
 

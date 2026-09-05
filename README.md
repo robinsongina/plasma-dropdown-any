@@ -13,7 +13,7 @@ No build step, no compiler, no `-dev`/`-devel` packages. The KWin script is plai
 ### Runtime
 
 | Dependency | Notes |
-|-----------|-------|
+| ----------- | ------- |
 | **Plasma 6 / KWin 6** | Required — the script runs inside the KWin scripting engine |
 | **kpackagetool6** | Required — installs both the KWin/Script and Plasma/Applet packages |
 | **qdbus6** (or `qdbus-qt6` / `qdbus`) | Required — used to reload KWin and to drive the widget's window-list detection. `install.sh`/`config-helper.sh` probe all three names, so any one is enough |
@@ -80,7 +80,7 @@ Each slot row in the Slots and Temporary slots tabs shows only the basics — Ap
 Each slot is configured independently with the following fields:
 
 | Field | Description | Example |
-|-------|-------------|---------|
+| ------- | ------------- | --------- |
 | Window class | The window's `resourceClass` | `konsole`, `kitty`, `sublime_text` |
 | Shortcut | Global shortcut key | `F12`, `Meta+F1`, `Ctrl+F12` |
 | Width % | Window width as a percentage of the screen | `100` |
@@ -115,7 +115,7 @@ Binding and releasing a temp slot each show a brief OSD confirmation (e.g. "Temp
 While a dropdown window is active (focused), four shortcuts adjust its size in real time:
 
 | Shortcut (default) | Action |
-|----------|--------|
+| ---------- | -------- |
 | `Alt+Shift+Up` | Increase height by 5 % |
 | `Alt+Shift+Down` | Decrease height by 5 % |
 | `Alt+Shift+Right` | Increase width by 5 % |
@@ -134,6 +134,28 @@ There's also **Release active temp slot** (default `Meta+Shift+X`) — see [Temp
 All seven of these are configurable from the widget's **Global shortcuts** section, alongside the per-slot ones.
 
 > **Note:** KWin scripting requires all shortcuts to be registered with KDE's global shortcut system (KGlobalAccel). They will also appear in **System Settings → Keyboard → Shortcuts → KWin**. This is a platform limitation — there is no way to have "private" shortcuts in a KWin script.
+
+## Dock
+
+Beyond the dropdown and tile machinery above, the script can also **dock** the currently focused window: it pins the window to the left or right edge of *its own* screen (never across the whole virtual desktop), keeping its size and leaving only a thin **sliver** visible so the window can still be grabbed back. The sliver is **24 px** wide by default; the width is editable (1–400 px) in the widget's **Dock** card and is read on script load, so a change applies on the next reload.
+
+| Shortcut (default) | Action |
+| ---------- | -------- |
+| `Ctrl+Shift+Left` | Dock the focused window to the left edge of its screen |
+| `Ctrl+Shift+Right` | Dock the focused window to the right edge of its screen |
+| `Ctrl+Shift+H` | Release all docked windows and restore their snapshots |
+
+All three are ordinary KWin global shortcuts, so they can be re-bound in the widget's **Global shortcuts** section (the same list as the live-resize shortcuts) or in **System Settings → Shortcuts → KWin**.
+
+Behavior worth knowing:
+
+- **Precedence** — the dock shortcut skips minimized, maximized, and fullscreen windows, as well as panel/shell windows (`plasmashell`, System Settings, `ksmserver`…). Nothing happens for those.
+- **Tiled windows** can still be docked: the window visually detiles while parked, but the tiling state persists — the tiled arrangement itself is not lost.
+- **The rest of the dropdown machinery ignores a docked window** — auto-hide on focus loss, temporary-slot toggles, and tile-pair toggles all skip a class that is currently docked, so parking is never disturbed by show/hide logic.
+- **Interaction** — clicking the sliver (i.e. activating the window) expands it back to its full pre-dock snapshot; losing focus re-docks it to the same edge from its current geometry. `Ctrl+Shift+H` releases everything at once, restoring each snapshot's position and size, and a second press with nothing docked is a no-op.
+- **Animation** — dock, expand, and re-dock are ordinary geometry moves made with the same skip-flag schedule as the dropdown show/hide path, so the slide effect animates them. A docked window usually isn't in the effect's `ManagedClasses` list, so the bundled effect animates it through the same `skipSwitcher` fallback (shared fallback style/duration) that temporary slots use.
+
+> **Collision note:** `Ctrl+Shift+Left` / `Ctrl+Shift+Right` are also the universal "select/move by word" keys in editors, terminals, and text fields. Those bindings live inside the apps themselves (they are not KGlobalAccel conflicts), so pressing them there acts on the text *and* triggers the dock. If you spend a lot of time in such an app, remap the two dock shortcuts — e.g. to a `Meta`-based combo — in the widget's **Global shortcuts** section or **System Settings → Shortcuts → KWin**. On a stock Plasma install the defaults are otherwise unclaimed (desktop moves use `Meta+Ctrl+Shift+…`), and `Ctrl+Shift+H` is rarely contended.
 
 ### Finding a window's resource class
 
@@ -231,6 +253,7 @@ journalctl -t kwin_wayland -f --no-pager | grep "DropdownAny"
 ```
 
 On load, the script prints:
+
 ```
 [DropdownAny] loaded — 1/10 slots active.
 ```
@@ -310,7 +333,7 @@ Note this is only relevant to `uninstall.sh` — plain `bash install.sh` (upgrad
 ## Known Plasma 6 gotchas
 
 | Issue | Cause | Fix |
-|-------|-------|-----|
+| ------- | ------- | ----- |
 | `Qt is not defined` | `Qt` namespace is not available in KWin JS scripts on Plasma 6 | Mutate the `QRectF` returned by `clientArea()` instead of using `Qt.rect()` |
 | `readConfig is not defined` in QML | KWin globals are not injected into `declarativescript` in some versions | Use `X-Plasma-API: javascript` with `main.js` |
 | Shortcut registered as `none` | The requested key was already taken by another app (e.g. F12 → Yakuake) | Use a different shortcut or set it manually in `kglobalshortcutsrc` |

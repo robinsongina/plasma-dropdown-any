@@ -91,6 +91,7 @@ find_dbus_cmd() {
 
 cmd_load() {
   require_tool kreadconfig6
+  require_tool kwriteconfig6 # cross-writes dockOffsetPx to the effect's own group
   require_python3
 
   local slot_count_raw=""
@@ -111,6 +112,9 @@ def kread(key, default=""):
         capture_output=True, text=True)
     v = r.stdout.strip()
     return v if v else default
+
+def kwrite(*args):
+    subprocess.run(["kwriteconfig6"] + list(args), check=True, capture_output=True)
 
 def to_int(val, default):
     try:
@@ -178,6 +182,22 @@ resize_width_dec_shortcut  = kread("resizeWidthDecShortcut",   "Alt+Shift+Left")
 release_temp_slot_shortcut = kread("releaseTempSlotShortcut",  "Meta+Shift+X")
 list_shortcuts_shortcut    = kread("listShortcutsShortcut",    "Meta+Shift+S")
 
+# Dock (global) — shared offset + the three dock shortcuts. Defaults must
+# mirror main.js readDockOffset()/readConfig keys exactly (fixed by A3).
+dock_offset_px         = to_int(kread("dockOffsetPx",         "24"), 24)
+
+# Cross-write the dock offset into the slide effect's own group (same
+# pattern as ManagedClasses/TempSlot* in save below) so
+# effect.readConfig("dockOffsetPx") can read it for hover — the effect
+# can only see [Effect-plasma-dropdown-any-slide], never the script
+# group. Also heals installs that only ever wrote the Script-group key.
+kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
+       "--key", "dockOffsetPx", str(dock_offset_px))
+
+dock_left_shortcut     = kread("dockLeftShortcut",       "Ctrl+Shift+Left")
+dock_right_shortcut    = kread("dockRightShortcut",      "Ctrl+Shift+Right")
+dock_release_all_shortcut = kread("dockReleaseAllShortcut", "Ctrl+Shift+H")
+
 # Shared fallback animation for temporary slots — the effect can't look up
 # a per-slot style/duration for these since their class isn't known until
 # runtime (see effect/contents/code/main.js header comment).
@@ -222,7 +242,11 @@ print(json.dumps({
     "releaseTempSlotShortcut":  release_temp_slot_shortcut,
     "listShortcutsShortcut":    list_shortcuts_shortcut,
     "tempSlotAnimationStyle":    temp_slot_animation_style,
-    "tempSlotAnimationDuration": temp_slot_animation_duration
+    "tempSlotAnimationDuration": temp_slot_animation_duration,
+    "dockOffsetPx":          dock_offset_px,
+    "dockLeftShortcut":      dock_left_shortcut,
+    "dockRightShortcut":     dock_right_shortcut,
+    "dockReleaseAllShortcut": dock_release_all_shortcut
 }))
 PYEOF
 }
@@ -317,7 +341,20 @@ global_shortcuts = {
     "resizeWidthDecShortcut":  ("DropdownAny-ResizeWidthDec",  "Alt+Shift+Left", "Dropdown: Decrease width"),
     "releaseTempSlotShortcut": ("DropdownAny-ReleaseTempSlot", "Meta+Shift+X",   "Dropdown Any: Release active temp slot"),
     "listShortcutsShortcut":   ("DropdownAny-ListShortcuts",  "Meta+Shift+S",   "Dropdown Any: List configured slots/tiles and global shortcuts"),
+    "dockLeftShortcut":        ("DropdownDockLeft",      "Ctrl+Shift+Left",   "Dropdown Any: Dock focused window to left edge"),
+    "dockRightShortcut":       ("DropdownDockRight",     "Ctrl+Shift+Right",  "Dropdown Any: Dock focused window to right edge"),
+    "dockReleaseAllShortcut":  ("DropdownDockReleaseAll", "Ctrl+Shift+H",      "Dropdown Any: Release all docked windows"),
 }
+# The dock offset is not a shortcut — write it straight to kwinrc. Object
+# names above (DropdownDock*) must match registerShortcut first arguments.
+kwrite("--file", "kwinrc", "--group", kwin_group,
+       "--key", "dockOffsetPx", str(data.get("dockOffsetPx", 24)))
+# Cross-write dockOffsetPx into the slide effect's own group (same
+# pattern as ManagedClasses/TempSlot* below) — the effect can only read
+# [Effect-plasma-dropdown-any-slide], so hover's sliver math needs the
+# key mirrored here.
+kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
+       "--key", "dockOffsetPx", str(data.get("dockOffsetPx", 24)))
 for key, (object_name, default_sc, description) in global_shortcuts.items():
     sc = data.get(key, "") or default_sc
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", key, sc)
