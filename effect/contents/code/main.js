@@ -12,6 +12,9 @@
 //                       slots and tile pairs.
 //   TempSlotStyle       Fallback style for temporary slots (see below).
 //   TempSlotDurationMs  Fallback duration for temporary slots (see below).
+//   DockStyle             Dock animation style cross-written from Script group.
+//   DockDurationMs        Dock animation duration cross-written from Script group.
+//   DockOffsetPx          Dock sliver width for geometry check.
 //
 // Temporary slots (window script feature: a slot with no fixed class,
 // bound at runtime to whichever app is focused when triggered) can't be
@@ -80,9 +83,6 @@ const STYLE_CURVES = {
 };
 
 const DEFAULT_DURATION_MS = 250;
-
-// Hover-to-expand constants (see DropdownSlideEffect.hoverCheck below):
-const HOVER_DEBOUNCE_MS = 300;
 const HOVER_TOLERANCE_PX = 2;
 
 class DropdownSlideEffect {
@@ -94,41 +94,7 @@ class DropdownSlideEffect {
         effects.windowAdded.connect(manageFn);
         effects.stackingOrder.forEach(manageFn);
 
-        // Hover-to-expand state
-        this.hoverLastWindow = null;
-        this.hoverLastTime = 0;
-        this.setupHover();
-
         this.loadConfig();
-    }
-
-    setupHover() {
-        try {
-            if (
-                typeof effects.mouseChanged !== "undefined" &&
-                effects.mouseChanged &&
-                typeof effects.mouseChanged.connect === "function"
-            ) {
-                effects.mouseChanged.connect((pos) => {
-                    try {
-                        this.hoverCheck(pos);
-                    } catch (err) {
-                        console.log(
-                            "[dropdown-slide effect] hover error: " + err,
-                        );
-                    }
-                });
-                console.log(
-                    "[dropdown-slide effect] hover enabled (mouseChanged)",
-                );
-            } else {
-                console.log(
-                    "[dropdown-slide effect] mouseChanged unavailable — hover disabled",
-                );
-            }
-        } catch (err) {
-            console.log("[dropdown-slide effect] hover setup failed: " + err);
-        }
     }
 
     loadConfig() {
@@ -164,7 +130,19 @@ class DropdownSlideEffect {
                 ? rawTempMs
                 : DEFAULT_DURATION_MS,
         );
-
+        const rawDockStyle = effect.readConfig("dockStyle", "Smooth");
+        this.dockStyle = STYLE_NAMES.includes(rawDockStyle)
+            ? rawDockStyle
+            : "Smooth";
+        const rawDockMs = parseInt(
+            effect.readConfig("dockDurationMs", 250),
+            10,
+        );
+        this.dockDuration = animationTime(
+            !isNaN(rawDockMs) && rawDockMs > 0
+                ? rawDockMs
+                : DEFAULT_DURATION_MS,
+        );
         const rawOffset = parseInt(effect.readConfig("dockOffsetPx", 24), 10);
         this.dockOffsetPx = isNaN(rawOffset) ? 24 : Math.max(1, rawOffset);
 
@@ -180,9 +158,7 @@ class DropdownSlideEffect {
                 this.tempSlotStyle +
                 ":" +
                 this.tempSlotDuration +
-                "ms" +
-                ", dockOffsetPx=" +
-                this.dockOffsetPx,
+                "ms",
         );
     }
 
@@ -221,11 +197,13 @@ class DropdownSlideEffect {
         if (matchedClass) {
             ({ style, duration } = this.classConfig.get(matchedClass));
         } else if (window.skipSwitcher) {
-            // Not a pre-registered class — likely a temporary slot's bound
-            // window (see header comment). Use the shared fallback instead
-            // of leaving it unanimated.
-            style = this.tempSlotStyle;
-            duration = this.tempSlotDuration;
+            if (this.isDockWindow(window)) {
+                style = this.dockStyle;
+                duration = this.dockDuration;
+            } else {
+                style = this.tempSlotStyle;
+                duration = this.tempSlotDuration;
+            }
         } else {
             return; // not one of ours
         }
@@ -286,79 +264,25 @@ class DropdownSlideEffect {
         });
     }
 
-    parkedEdge(window) {
+    isDockWindow(window) {
         const wg = window.geometry;
-        const screen = window.screen;
-        if (!wg || !screen) return "";
+        let screen = window.screen;
+        if (!wg) return false;
+        if (!screen)
+            screen =
+                effects.activeScreen ||
+                (effects.stackingOrder[0] && effects.stackingOrder[0].screen);
+        if (!screen || !screen.geometry) return false;
         const sg = screen.geometry;
-        if (!sg) return "";
         const o = this.dockOffsetPx;
         if (Math.abs(wg.x + wg.width - (sg.x + o)) <= HOVER_TOLERANCE_PX)
-            return "left";
+            return true;
         if (Math.abs(wg.x - (sg.x + sg.width - o)) <= HOVER_TOLERANCE_PX)
-            return "right";
-        return "";
-    }
-
-    sliverRect(window, edge) {
-        const wg = window.geometry;
-        const sg = window.screen.geometry;
-        const o = this.dockOffsetPx;
-        return edge === "left"
-            ? { x: sg.x, y: wg.y, width: o, height: wg.height }
-            : { x: sg.x + sg.width - o, y: wg.y, width: o, height: wg.height };
-    }
-
-    windowAtSliver(pos) {
-        const px = pos.x;
-        const py = pos.y;
-        for (const w of effects.stackingOrder) {
-            if (!w.dropdownSlideData) continue;
-            const edge = this.parkedEdge(w);
-            if (!edge) continue;
-            const rect = this.sliverRect(w, edge);
-            if (
-                px >= rect.x &&
-                px < rect.x + rect.width &&
-                py >= rect.y &&
-                py < rect.y + rect.height
-            )
-                return w;
-        }
-        return null;
-    }
-
-    hoverCheck(pos) {
-        if (!pos || typeof pos.x !== "number" || typeof pos.y !== "number")
-            return;
-        const target = this.windowAtSliver(pos);
-        if (!target || target === effects.activeWindow) return;
-        const now = Date.now();
-        if (
-            target === this.hoverLastWindow &&
-            now - this.hoverLastTime < HOVER_DEBOUNCE_MS
-        )
-            return;
-        try {
-            effects.activeWindow = target;
-        } catch (e) {
-            void e;
-            try {
-                if (typeof effects.activateWindow === "function")
-                    effects.activateWindow(target);
-                else return;
-            } catch (_e2) {
-                void _e2;
-                return;
-            }
-        }
-        this.hoverLastWindow = target;
-        this.hoverLastTime = now;
-        console.log(
-            "[dropdown-slide effect] hover → " +
-                target.windowClass +
-                " sliver activated",
-        );
+            return true;
+        if (Math.abs(wg.x - sg.x) <= HOVER_TOLERANCE_PX) return true;
+        if (Math.abs(wg.x + wg.width - (sg.x + sg.width)) <= HOVER_TOLERANCE_PX)
+            return true;
+        return false;
     }
 }
 

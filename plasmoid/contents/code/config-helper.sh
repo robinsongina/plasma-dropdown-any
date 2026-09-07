@@ -122,6 +122,8 @@ def to_int(val, default):
     except (ValueError, TypeError):
         return default
 
+STYLE_NAMES = ["Smooth", "Elastic", "Bounce", "Back", "Linear", "Flip3D"]
+
 sc_str = "${sc_raw}".strip()
 slot_count = int(sc_str) if sc_str.lstrip("-").isdigit() else -1
 
@@ -198,6 +200,14 @@ dock_left_shortcut     = kread("dockLeftShortcut",       "Ctrl+Shift+Left")
 dock_right_shortcut    = kread("dockRightShortcut",      "Ctrl+Shift+Right")
 dock_release_all_shortcut = kread("dockReleaseAllShortcut", "Ctrl+Shift+H")
 
+# Dock animation — style/duration for parked/expanded dock windows. Read
+# here (script group) for the round-trip; save cross-writes it into the
+# effect's own group where main.js can read it.
+dock_style = kread("dockStyle", "Smooth")
+if dock_style not in STYLE_NAMES:
+    dock_style = "Smooth"
+dock_duration_ms = to_int(kread("dockDurationMs", "250"), 250)
+
 # Shared fallback animation for temporary slots — the effect can't look up
 # a per-slot style/duration for these since their class isn't known until
 # runtime (see effect/contents/code/main.js header comment).
@@ -246,7 +256,9 @@ print(json.dumps({
     "dockOffsetPx":          dock_offset_px,
     "dockLeftShortcut":      dock_left_shortcut,
     "dockRightShortcut":     dock_right_shortcut,
-    "dockReleaseAllShortcut": dock_release_all_shortcut
+    "dockReleaseAllShortcut": dock_release_all_shortcut,
+    "dockStyle":             dock_style,
+    "dockDurationMs":        dock_duration_ms
 }))
 PYEOF
 }
@@ -314,6 +326,8 @@ import json, subprocess
 def kwrite(*args):
     subprocess.run(["kwriteconfig6"] + list(args), check=True, capture_output=True)
 
+STYLE_NAMES = ["Smooth", "Elastic", "Bounce", "Back", "Linear", "Flip3D"]
+
 kwin_group = "${kwin_group}"
 
 with open("${json_file}") as f:
@@ -355,6 +369,22 @@ kwrite("--file", "kwinrc", "--group", kwin_group,
 # key mirrored here.
 kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
        "--key", "dockOffsetPx", str(data.get("dockOffsetPx", 24)))
+# Dock animation — same pattern as dockOffsetPx: written to the script's
+# own group for the load/save round-trip, and cross-written into the slide
+# effect's own group (the only one effect.readConfig() can see) so main.js
+# can read dockStyle/dockDurationMs for parked/expanded dock windows.
+dock_style = data.get("dockStyle", "Smooth") or "Smooth"
+if dock_style not in STYLE_NAMES:
+    dock_style = "Smooth"
+dock_duration = data.get("dockDurationMs", 250)
+kwrite("--file", "kwinrc", "--group", kwin_group,
+       "--key", "dockStyle", dock_style)
+kwrite("--file", "kwinrc", "--group", kwin_group,
+       "--key", "dockDurationMs", str(dock_duration))
+kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
+       "--key", "dockStyle", dock_style)
+kwrite("--file", "kwinrc", "--group", "Effect-plasma-dropdown-any-slide",
+       "--key", "dockDurationMs", str(dock_duration))
 for key, (object_name, default_sc, description) in global_shortcuts.items():
     sc = data.get(key, "") or default_sc
     kwrite("--file", "kwinrc", "--group", kwin_group, "--key", key, sc)

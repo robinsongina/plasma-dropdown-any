@@ -61,6 +61,11 @@ Item {
     property string dockRightShortcut:      "Ctrl+Shift+Right"
     property string dockReleaseAllShortcut: "Ctrl+Shift+H"
 
+    // Dock animation — style/duration for parked/expanded dock windows.
+    // Defaults mirror effect/contents/code/main.js readConfig keys exactly.
+    property string dockStyle:     "Smooth"
+    property int    dockDurationMs: 250
+
     // Shared fallback animation for temporary slots — the slide effect can't
     // look up a per-slot style/duration for these (class unknown ahead of
     // time), so all temporary slots share this one instead.
@@ -134,6 +139,8 @@ Item {
             dockLeftShortcut       = data.dockLeftShortcut       || "Ctrl+Shift+Left"
             dockRightShortcut      = data.dockRightShortcut      || "Ctrl+Shift+Right"
             dockReleaseAllShortcut = data.dockReleaseAllShortcut || "Ctrl+Shift+H"
+            dockStyle            = data.dockStyle            || "Smooth"
+            dockDurationMs       = data.dockDurationMs       !== undefined ? data.dockDurationMs : 250
             tempSlotAnimationStyle    = data.tempSlotAnimationStyle    || "Smooth"
             tempSlotAnimationDuration = data.tempSlotAnimationDuration !== undefined ? data.tempSlotAnimationDuration : 250
             regularSlotModel.clear()
@@ -415,6 +422,8 @@ Item {
             dockLeftShortcut:      dockLeftShortcut,
             dockRightShortcut:     dockRightShortcut,
             dockReleaseAllShortcut: dockReleaseAllShortcut,
+            dockStyle:             dockStyle,
+            dockDurationMs:        dockDurationMs,
             tempSlotAnimationStyle:    tempSlotAnimationStyle,
             tempSlotAnimationDuration: tempSlotAnimationDuration
         })
@@ -1641,6 +1650,52 @@ Item {
                                     dirty = true
                                 }
                             }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Controls.Label {
+                                text: qsTr("Style")
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            Controls.ComboBox {
+                                Layout.preferredWidth: 130
+                                model: ["Smooth", "Elastic", "Bounce", "Back", "Linear", "Flip3D"]
+                                currentIndex: {
+                                    var idx = root.styleValues.indexOf(root.dockStyle)
+                                    return idx >= 0 ? idx : 0
+                                }
+                                onActivated: function(idx) {
+                                    root.dockStyle = root.styleValues[idx]
+                                    dirty = true
+                                }
+                            }
+
+                            Controls.Label {
+                                text: qsTr("Duration")
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            Controls.SpinBox {
+                                Layout.preferredWidth: 120
+                                from: 50; to: 1000; stepSize: 50
+                                value: root.dockDurationMs
+                                editable: true
+                                textFromValue: function(v) { return v + qsTr(" ms") }
+                                valueFromText: function(t) {
+                                    var n = parseInt(t)
+                                    return isNaN(n) ? from : Math.max(from, Math.min(to, n))
+                                }
+                                onValueModified: {
+                                    root.dockDurationMs = value
+                                    dirty = true
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
                         }
 
                         Controls.Label {
