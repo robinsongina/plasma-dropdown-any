@@ -2,6 +2,7 @@
 change: dockit
 phase: verify
 status: pass
+archived: 2026-10-19
 ---
 
 # Verify Report — dockit (MVP)
@@ -224,3 +225,56 @@ Remaining verification is the live-KWin session checklist (§9), which the headl
 environment cannot perform. No blockers. WARNINGs 1–4 are evidence-quality /
 boundary-attribution / cosmetic and should be actioned by the orchestrator before or
 at merge of the stacked chain.
+
+---
+
+## 11. Final verification status — 2026-10-19 (post-merge, archived)
+
+Recorded at archive time, on `master` at commit `28e4506`. Sections 1–10 above are
+left unchanged; this section records the evidence that closed the headless gap and
+the two items that remain **open**.
+
+Status: **PASS** for the static/headless surface and for the live smoke recorded
+below; **2 manual items remain open** (listed at the end — they are not passed).
+
+### Evidence confirmed in the parent session (reported verbatim, not re-derived here)
+
+Scratch mock-KWin harnesses (never committed; `/tmp/dockit-guards-UupY/`):
+
+| Harness | Coverage | Result |
+| --- | --- | --- |
+| `harness.js` | dock / re-dock / expand / release, desktop-switch gates, false-skip + re-arm regressions | 24/24 |
+| `harness2.js` | built without `currentDesktopChanged` / `currentDesktopChanging` | 8/8 |
+| `harness3.js` | `dockOffsetPx` read at load: 24, 32, 1-floor, non-numeric → 24, missing → 24 | 5/5 |
+
+- `node --check contents/code/main.js`: clean on the merged tree.
+- **Live:** `~/.local/share/kwin/scripts/plasma-dropdown-any/contents/code/main.js` is
+  byte-identical to `master` and loaded (`isScriptLoaded=true`, journal
+  `[DropdownAny] loaded`); the user reproduced the original workspace-switch scenario
+  and reported "Listo quedo bien".
+- **KGlobalAccel registration:** `~/.config/kglobalshortcutsrc` `[kwin]` has
+  `DropdownDockLeft=Ctrl+Shift+Left,none,…`,
+  `DropdownDockRight=Ctrl+Shift+Right,none,…`,
+  `DropdownDockReleaseAll=Ctrl+Shift+H,none,…`; `kwinrc [Script-plasma-dropdown-any]`
+  has `dockOffsetPx=24`, `dockLeftShortcut`, `dockRightShortcut`,
+  `dockReleaseAllShortcut`.
+- **Widget (static evidence only):** `plasmoid/contents/ui/ConfigEditor.qml` has the
+  Dock card (~line 1622), the three shortcut rows (~1586-1588), `dockOffsetPx`
+  (default 24) and the shared `dirty` flag.
+
+### Open manual items (NOT passed)
+
+1. **Live KGlobalAccel rebinding from the widget / System Settings.** Registration is
+   verified (see above and §4). A live remap was not re-run on 2026-10-19, so the
+   end-to-end behavior of the scenario "Shortcut remap changes the effective binding"
+   (new binding docks, old binding inert) is unconfirmed live.
+2. **Visual confirmation of the Dock card.** That the Dock card renders, sets the
+   shared `dirty` flag, and shows the conflict hint is confirmed statically only; no
+   live render was observed.
+
+Both items must be closed in a live KWin + plasmoid settings session before they are
+claimed as passing.
+
+> **Count drift (not fixed here):** §1 states "20 scenarios" while
+> `specs/dock/spec.md` carries 26 `#### Scenario:` headings. Recorded so the next
+> reader is not misled; the historical wording of §§1-10 is left untouched.
