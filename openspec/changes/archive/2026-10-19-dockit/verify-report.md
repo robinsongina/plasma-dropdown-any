@@ -278,3 +278,40 @@ claimed as passing.
 > **Count drift (not fixed here):** §1 states "20 scenarios" while
 > `specs/dock/spec.md` carries 26 `#### Scenario:` headings. Recorded so the next
 > reader is not misled; the historical wording of §§1-10 is left untouched.
+
+### Closure attempt — 2026-10-19, live GUI session (Orca computer-use, `plasmawindowed org.kde.plasma.dropdownany`)
+
+Opened the standalone configuration window (`bash configure`) and drove it through the accessibility tree.
+
+**Item 1 (live KGlobalAccel rebinding) — CLOSED at the registration layer.**
+The widget's save path writes both `kwinrc [Script-plasma-dropdown-any] dockLeftShortcut`
+and `kglobalshortcutsrc [kwin] DropdownDockLeft = "<sc>,none,<description>"`
+(`config-helper.sh` lines 391-393). Reproducing exactly those two writes plus a script reload
+changed the effective binding to `Ctrl+Shift+F10` in `kglobalshortcutsrc`, and repeating them
+with `Ctrl+Shift+Left` restored it. Note the boundary: a remap that only edits `kwinrc` does
+NOT move the binding, because KGlobalAccel keeps the stored active shortcut; the writethrough
+to `kglobalshortcutsrc` is what makes a remap effective. A physical keypress on the remapped
+combo was not performed.
+
+**Item 2 (Dock card render) — render and conflict hint CONFIRMED; dirty-flag/Apply interaction still UNVERIFIED.**
+The tree exposes the Dock card as a card containing: `Visible sliver width 24 px`,
+`Style Smooth`, `Duration 250 ms`, the three rows `Dock focused window to left edge`
+(`Ctrl+Shift+Left`), `Dock focused window to right edge` (`Ctrl+Shift+Right`),
+`Release all docked windows` (`Ctrl+Shift+H`), the heading `Dock`, the collision hint
+("Applies to any focused window … Ctrl+Shift+Left / Ctrl+Shift+Right may collide with in-app
+shortcuts — remap in System Settings → Shortcuts …"), and an `Apply` button. Raising the
+sliver spinbox by one step updated the row to `28 px`, so the control is live and bound to
+`root.dockOffsetPx`.
+
+The dirty flag itself is `enabled: dirty && !_saving` on Apply (`ConfigEditor.qml:1747`), and
+this AT-SPI backend exposes neither enabled state nor checkbox state, so it is not observable
+from the tree. Pressing `Apply` after that change (`click --element-index`, both with and
+without `--restore-window`, reported `ok` but `unverified`) produced no `kwinrc` write and no
+script reload, i.e. the accessibility click could not be shown to land on the button — it is
+NOT evidence that the button is broken. Side effects of this session were reverted: both
+`kwinrc` and `kglobalshortcutsrc` were restored byte-identically to their pre-session backups
+(verified with `diff`), including a `debugMode` flip made while probing the checkbox and the
+`DropdownAny-ListShortcuts` entry that a reload re-enables.
+
+**Still open:** a human clicking `Apply` in the Dock card (or the panel widget's config dialog)
+and a physical keypress on a remapped dock shortcut.
