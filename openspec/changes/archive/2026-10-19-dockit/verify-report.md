@@ -315,3 +315,13 @@ NOT evidence that the button is broken. Side effects of this session were revert
 
 **Still open:** a human clicking `Apply` in the Dock card (or the panel widget's config dialog)
 and a physical keypress on a remapped dock shortcut.
+
+### Final disposition — 2026-10-19
+
+Maintainer decision (verbatim): "esta bien cierralo". The change is closed with the two
+remaining items **closed by maintainer acceptance, not by observed evidence**: the manual
+`Apply` click in the Dock card and a physical keypress on a remapped dock shortcut were not
+re-run after the accessibility session. No result is claimed for either; both are recorded as
+accepted open risks on a surface that is shared QML state (`dirty`) and KGlobalAccel
+bookkeeping, not dock-specific logic. Re-verify them if the config dialog or the shortcut
+wiring is touched again.
