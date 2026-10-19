@@ -1,3 +1,8 @@
 kcm/build/
 # Local Pi runtime state
 .atl/
+
+# Local runtime / tooling state
+.codegraph/
+.cursor/
+CMakeFiles/
