@@ -55,19 +55,48 @@ corresponding dock shortcut is pressed, with these guarantees:
 - THEN the window is re-parked at the right edge of its screen with `dockOffsetPx` visible
 - AND the pre-dock snapshot recorded at the original dock time is preserved
 
-### Requirement: Expand on Activation and Re-dock on Blur
+### Requirement: Expand on Intentional Activation and Re-dock on Blur
 
 The system MUST expand a docked window to its snapshotted pre-dock geometry when
-the window is activated (clicking the sliver is an ordinary window activation)
-and MUST re-dock it to the same edge and offset when it loses focus. Re-docking
-MUST re-park the window using its current geometry and MUST NOT modify its
+the user deliberately activates it by clicking the visible sliver, and MUST
+re-dock it to the same edge and offset when it loses focus. Re-docking MUST
+re-park the window using its current geometry and MUST NOT modify its
 width or height.
+
+An activation the dock did not ask for MUST leave the window parked. KWin
+focuses the topmost window of the desktop it lands on, so switching desktops can
+activate a parked window on its own. Expansion therefore requires the pointer
+inside the parked sliver's rectangle, and the activation must not be the switch
+itself: a desktop switch observed in the preceding 500 ms is rejected, and on a
+build that exposes no desktop-change signal at all, an activation arriving on a
+different desktop than the one the entry was parked on is rejected (the entry
+re-arms to that desktop). Docking, re-docking, and expanding record the desktop
+they happened on.
 
 #### Scenario: Clicking the sliver expands the window
 
 - GIVEN a window docked at the left edge with a pre-dock snapshot
 - WHEN the user clicks the visible sliver (the window becomes the active window)
 - THEN the window is restored to its pre-dock geometry (position and size)
+
+#### Scenario: Switching desktops does not expand the dock
+
+- GIVEN a window docked on desktop 1, with desktop 1 recorded as its parked desktop
+- WHEN the user switches to desktop 2, where KWin activates the parked window
+- THEN the window stays parked with `dockOffsetPx` visible
+- AND the entry records desktop 2 as its parked desktop
+
+#### Scenario: Activation away from the sliver does not expand the dock
+
+- GIVEN a parked dock whose pointer is outside the sliver rectangle
+- WHEN the window becomes active without a sliver click (taskbar, task switcher, or KWin's own focus)
+- THEN the window stays parked
+
+#### Scenario: Clicking the sliver on a freshly switched desktop still expands
+
+- GIVEN a parked dock whose parked desktop was re-armed to the current desktop
+- WHEN the user clicks the visible sliver
+- THEN the window is restored to its pre-dock geometry
 
 #### Scenario: Losing focus re-docks the window
 
@@ -258,8 +287,12 @@ tiling state persists underneath (documented limitation, not engineered).
   `keepAbove` or `allDesktops` settings; "docked implies pinned above" is a
   documented non-decision for the MVP.
 - **No new input plumbing.** Expands occur only through ordinary window
-  activation; re-docks only through focus loss. No timers, polling, or pointer
-  tracking are used.
+  activation, gated to an intentional sliver click: pointer hit-test, plus a
+  rejection of the desktop-switch activation itself (a switch in the preceding
+  500 ms, or — when the build exposes no desktop-change signal — a different
+  desktop than the one the entry was parked on). Re-docks happen only through
+  focus loss. The gates read `workspace.cursorPos` and `Date.now()` at event
+  time; no timers, polling, or pointer tracking are used.
 - **Runtime-only state.** Dock state is not persisted; a docked window left
   parked when KWin restarts keeps its parked geometry but is no longer tracked.
 

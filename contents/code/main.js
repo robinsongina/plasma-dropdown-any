@@ -940,7 +940,7 @@
     // first. Runtime-only: KWin reload wipes the tracker; parked windows keep
     // geometry but are untracked (spec rule).
     //
-    var dockedWindows = {}; // cls → { x,y,width,height, edge, offsetPx, expanded, screenName }
+    var dockedWindows = {}; // cls → { x,y,width,height, edge, offsetPx, expanded, screenName, parkedDesktop }
 
     // Global sliver width, read once at load (spec: offset applies on reload).
     function readDockOffset() {
@@ -1023,6 +1023,42 @@
         return { x: x, y: g.y, width: g.width, height: g.height };
     }
 
+    // Hit-test for the parked sliver. The visible strip is [screen.x,
+    // screen.x + offset) on the left edge and [right − offset, right) on the
+    // right edge, spanning the parked window's current y-range. Used by the B1
+    // sweep to demand an intentional sliver click before expanding: KWin
+    // activates a lone window on its own when switching to an otherwise empty
+    // desktop, and that activation must leave the dock parked.
+    //
+    // Returns true/false, or null when workspace.cursorPos is unavailable in
+    // this KWin build — the caller then falls back to the desktop-switch guards
+    // alone instead of making the dock impossible to expand.
+    function cursorOverSliver(win, entry) {
+        var cpos = workspace.cursorPos;
+        if (!cpos) return null;
+        var scr = null;
+        for (var i = 0; i < workspace.screens.length; i++) {
+            if (outputKey(workspace.screens[i]) === entry.screenName) {
+                scr = workspace.screens[i];
+                break;
+            }
+        }
+        if (!scr) scr = dockScreenFor(win);
+        if (!scr) return null;
+        var sg = scr.geometry;
+        var sliverX =
+            entry.edge === "right"
+                ? sg.x + sg.width - entry.offsetPx
+                : sg.x;
+        var wg = win.frameGeometry;
+        return (
+            cpos.x >= sliverX &&
+            cpos.x < sliverX + entry.offsetPx &&
+            cpos.y >= wg.y &&
+            cpos.y < wg.y + wg.height
+        );
+    }
+
     // Sole geometry-mutation path for dock. Skip-flag schedule (design §7):
     // the effect gate reads skipSwitcher at geometry-change time (T0 item 4),
     // and the spec requires docked windows to STAY visible in taskbar/pager/
@@ -1075,6 +1111,20 @@
             return String(output.name);
         var g = output.geometry;
         if (g) return g.x + "," + g.y + "," + g.width + "," + g.height;
+        return "";
+    }
+
+    // Identity of the current virtual desktop. Used to tell a sliver click apart
+    // from KWin's own activation of the topmost window when the user lands on a
+    // desktop: coming from a different desktop than the one the entry was
+    // parked on means the activation is the switch, not a click. "" when the
+    // build exposes neither id nor number (guard then simply stays inert).
+    function currentDesktopKey() {
+        var d = workspace.currentDesktop;
+        if (!d) return "";
+        if (d.id !== undefined && d.id !== "") return String(d.id);
+        if (d.x11DesktopNumber !== undefined)
+            return String(d.x11DesktopNumber);
         return "";
     }
 
@@ -1174,6 +1224,9 @@
             return;
         }
         moveDocked(win, parkRectFor(win, scr, entry.edge, entry.offsetPx));
+        // Re-arm the switch guard: the entry is parked on the desktop the user
+        // is on right now.
+        entry.parkedDesktop = currentDesktopKey();
         dbg(
             "dock re-dock → " +
                 win.resourceClass +
@@ -1198,6 +1251,9 @@
             var existing = dockedWindows[cls];
             existing.edge = edge;
             existing.expanded = false;
+            // The user acted on this desktop: re-arm the switch guard here too,
+            // so the next activation on it counts as a click.
+            existing.parkedDesktop = currentDesktopKey();
             var scr = dockScreenFor(win);
             if (scr)
                 moveDocked(win, parkRectFor(win, scr, edge, existing.offsetPx));
@@ -1241,6 +1297,7 @@
             offsetPx: DOCK_OFFSET_PX,
             expanded: false,
             screenName: outputKey(scr),
+            parkedDesktop: currentDesktopKey(),
         };
         dockedWindows[cls] = entry;
 
@@ -1280,6 +1337,33 @@
 
     // ── Dock handlers (B1–B3) ────────────────────────────────────────────────
     //
+    // Debounce desktop switch: switching to an empty workspace where the docked
+    // window is the only onAllDesktops window auto-activates it; ignore B1 expands
+    // for 500ms after desktop change so the dock stays parked until intentional click.
+    var lastDesktopSwitch = 0;
+    try {
+        if (
+            workspace.currentDesktopChanged &&
+            workspace.currentDesktopChanged.connect
+        )
+            workspace.currentDesktopChanged.connect(() => {
+                lastDesktopSwitch = Date.now();
+            });
+    } catch (_e) {
+        void _e;
+    }
+    try {
+        if (
+            workspace.currentDesktopChanging &&
+            workspace.currentDesktopChanging.connect
+        )
+            workspace.currentDesktopChanging.connect(() => {
+                lastDesktopSwitch = Date.now();
+            });
+    } catch (_e2) {
+        void _e2;
+    }
+    //
     // B1 — single windowActivated sweep. Expand only when parked + still plain;
     // re-dock (or release) every expanded entry that lost focus — including
     // activeWin === null (desktop). At most one transition per entry per
@@ -1290,6 +1374,38 @@
             var win = findByClass(cls);
             if (!win) return;
             if (win === activeWin) {
+                // Three guards keep spontaneous activations from expanding the
+                // dock; a real click passes all of them:
+                //  1) the desktop the entry was parked on — the only switch
+                //     evidence when the desktop-change signals never fire, and
+                //     time-scoped otherwise so a click on a quiet desktop is
+                //     never swallowed;
+                //  2) the desktop-switch debounce (caught signal);
+                //  3) the sliver hit-test (the pointer where a click would be).
+                var desk = currentDesktopKey();
+                var sinceSwitch = Date.now() - lastDesktopSwitch;
+                // lastDesktopSwitch stays 0 when this build never fired either
+                // switch signal — then the debounce below cannot help and the
+                // parked-desktop comparison is the only switch evidence left.
+                var noSwitchSignal = lastDesktopSwitch === 0;
+                if (
+                    entry.parkedDesktop &&
+                    desk &&
+                    entry.parkedDesktop !== desk &&
+                    (noSwitchSignal || sinceSwitch < 500)
+                ) {
+                    entry.parkedDesktop = desk;
+                    dbg("dock expand skipped → activated by desktop switch");
+                    return;
+                }
+                if (sinceSwitch < 500) {
+                    dbg("dock expand skipped → desktop switch debounce");
+                    return;
+                }
+                if (cursorOverSliver(win, entry) === false) {
+                    dbg("dock expand skipped → cursor not over sliver");
+                    return;
+                }
                 // Sliver clicked (ordinary activation): expand when parked.
                 if (
                     !entry.expanded &&

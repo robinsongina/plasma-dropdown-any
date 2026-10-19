@@ -118,3 +118,49 @@ Partial smoke V2 = the three node harnesses above (main.js only, mock KWin API).
 ## Remaining work (PR 1–3 all applied — only verify phase left)
 
 - Verify phase: V1–V3 matrix (install, `kwin6 --replace`, journal `[DropdownAny] loaded`, live dock/expand/re-dock/release cycle, KGlobalAccel remap, offset change on reload, widget render + dirty flag + conflict UI).
+
+## Post-verify amendment — expand requires an intentional click
+
+**User report (verbatim, this session):** "Se esta activando hay veces cuando cambio de workspace, que solo se active cuando se presione click" — preceded by: "cuando una app esta activa en todos lo escritorio y esta oculta, cuando paso a un workspace sin ventanas, se esta activando sola".
+
+**Cause.** The B1 sweep expanded on *any* activation of the parked window. KWin focuses the topmost window of the desktop it lands on, so a desktop switch activates an `onAllDesktops` parked dock on its own and the dock popped out. A first attempt (debounce on `currentDesktopChanged`/`currentDesktopChanging` + `workspace.cursorPos` hit-test) was installed live on 2026-09-07 11:03 and the report repeated afterwards, so the sweep now gates expansion on three conditions, checked in this order inside `win === activeWin`:
+
+1. **Parked desktop match** (`currentDesktopKey()` vs `entry.parkedDesktop`, set at dock time, re-armed in `redockDocked()` and in `dockWindow()`'s already-docked branch): an activation arriving while the current desktop differs from the parked one is the switch itself — the entry re-arms to the new desktop and stays parked. Time-scoped to keep it from swallowing a real click: it only rejects when no desktop-change signal has ever fired in this session (the build that can never catch the switch) or when one fired in the preceding 500 ms. Signal- and timing-independent fallback, deliberate trade: without any signal evidence the first click after a switch is consumed, which is better than the dock popping out on every switch.
+2. **Desktop-switch debounce** (500 ms timestamp on `currentDesktopChanged`/`currentDesktopChanging`, both hedged): catches the same event burst when the signal exists.
+3. **Sliver hit-test** (`cursorOverSliver(win, entry)`): the pointer must be inside the parked sliver rectangle; `null` (no `workspace.cursorPos`) degrades to the two guards above instead of making the dock impossible to expand.
+
+Each rejected activation logs a distinct `dbg()` line (`activated by desktop switch` / `desktop switch debounce` / `cursor not over sliver`), so a live session with `debugMode=true` identifies which gate fired.
+
+**Documented consequence.** After a desktop switch the parked window can already be the active one, and a click on an already-active window produces no activation event — click anywhere else first, then grab the sliver. README's Interaction bullet states this.
+
+**Spec.** `specs/dock/spec.md`: requirement renamed to "Expand on Intentional Activation and Re-dock on Blur", three new scenarios (desktop switch, activation away from the sliver, click after a switch), and the "No new input plumbing" business rule amended to describe the gates. No timers or polling were added (`Date.now()` at event time only, per `agents.md`).
+
+**Re-run before closing.** Verify smoke V6/V15 (click-sliver expand, Wayland activation) plus a new desktop-switch check: dock a window, switch to an empty desktop with the pointer parked over the sliver, and confirm it stays parked.
+
+**Inline harness evidence (scratch, never committed — `/tmp/dockit-guards-UupY/`).** No runner exists in this repo, so `contents/code/main.js` was loaded in Node under a mock KWin environment (mocked `workspace`, `readConfig`, `registerShortcut`, `callDBus`, and a controllable `Date.now()`), driving the registered dock shortcuts and the captured `windowActivated` handler:
+
+| Harness | Coverage | Result |
+| --- | --- | --- |
+| `harness.js` (desktop-change signals present) | park left/right (+ sliver math both edges), click-expand, blur→re-dock, switch debounce, quiet-switch first click, cursor outside the sliver, shortcut re-dock re-arm, minimized no-expand, other-window activation, release-all restore ×3 | 24/24 PASS |
+| `harness2.js` (neither `currentDesktopChanged` nor `currentDesktopChanging` exists) | park, switch activation stays parked via the parked-desktop fallback, click after the switch expands, second switch, click again | 8/8 PASS |
+
+Two defects the harness caught and this change fixes:
+
+- **False skip on a quiet switch.** With the parked-desktop comparison unconditional, docking on desktop A, switching to a busy desktop B (no auto-activation) and then clicking the sliver had `parkedDesktop` still A → the first click was swallowed. Fixed by time-scoping guard 1 as described above; `harness.js` S6 pins it.
+- **Stale parked desktop after a shortcut re-dock.** `dockWindow()`'s already-docked branch re-parked the window without updating `parkedDesktop`, so a shortcut re-dock on a new desktop also ate the next click. Fixed; `harness.js` S10 pins it.
+
+**Still only provable live:** whether KWin emits `windowActivated` when the user clicks an already-active parked window (it does not for an already-active window in KWin's activation path), and whether the desktop-change signals actually fire on KWin 6.7.4 — the harness covers both branches of that hedge, but not which one the live session takes.
+
+## Delivery slice boundary (feat/dockit vs origin/master)
+
+| Commit | Subject | Changed lines |
+| --- | --- | --- |
+| `682374e` | feat(dockit): dock lateral con sliver, hover expand y slide desde borde | 3554 insertions / 207 deletions (15 files) |
+| `b79efa4` | feat(dockit): dock animation selector + hover discarded | 124 / 115 (3 files) |
+| `b44446a` | fix(dock): expand only on an intentional sliver click | 189 / 8 (4 files) |
+
+The dock feature landed in one 3554-line commit, far past the ~400-line review slice. `682374e` is the slice boundary that needs a delivery decision before any further commit on this branch: either split it into the PR1/PR2/PR3 work units the design already describes (main.js dock section + gates / config + widget / verify-phase docs), or accept it as a single reviewed unit. Nothing was pushed for `b44446a`; `origin/feat/dockit` still points at `b79efa4`.
+
+## Live smoke — desktop-switch gate confirmed
+
+After the copy-install + D-Bus reload of the final `main.js` (`cmp` identical to `HEAD`), the user reproduced the original scenario on the live KWin 6.7.4 session and reported (verbatim): "Listo quedo bien". The parked dock no longer expands when switching workspaces, and the sliver click still expands it. V6/V15 and the desktop-switch check above are therefore satisfied live; the remaining verify-phase items (KGlobalAccel remap, offset change on reload, widget render) were already covered by the earlier verify report.
