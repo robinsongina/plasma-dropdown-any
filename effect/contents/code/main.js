@@ -1,5 +1,3 @@
-"use strict";
-
 // plasma-dropdown-any-slide — KWin effect that animates show/hide ONLY for
 // windows managed by the plasma-dropdown-any KWin script, instead of
 // depending on a generic third-party effect (kwin4_effect_geometry_change)
@@ -14,6 +12,9 @@
 //                       slots and tile pairs.
 //   TempSlotStyle       Fallback style for temporary slots (see below).
 //   TempSlotDurationMs  Fallback duration for temporary slots (see below).
+//   DockStyle             Dock animation style cross-written from Script group.
+//   DockDurationMs        Dock animation duration cross-written from Script group.
+//   DockOffsetPx          Dock sliver width for geometry check.
 //
 // Temporary slots (window script feature: a slot with no fixed class,
 // bound at runtime to whichever app is focused when triggered) can't be
@@ -73,15 +74,16 @@
 // onWindowFrameGeometryChanged).
 const STYLE_NAMES = ["Smooth", "Elastic", "Bounce", "Back", "Linear", "Flip3D"];
 const STYLE_CURVES = {
-    Smooth:  QEasingCurve.OutExpo,
+    Smooth: QEasingCurve.OutExpo,
     Elastic: QEasingCurve.OutElastic,
-    Bounce:  QEasingCurve.OutBounce,
-    Back:    QEasingCurve.OutBack,
-    Linear:  QEasingCurve.Linear,
-    Flip3D:  QEasingCurve.OutExpo,
+    Bounce: QEasingCurve.OutBounce,
+    Back: QEasingCurve.OutBack,
+    Linear: QEasingCurve.Linear,
+    Flip3D: QEasingCurve.OutExpo,
 };
 
 const DEFAULT_DURATION_MS = 250;
+const HOVER_TOLERANCE_PX = 2;
 
 class DropdownSlideEffect {
     constructor() {
@@ -99,42 +101,83 @@ class DropdownSlideEffect {
         // "class:Style:DurationMs" triples, one per managed window class.
         const raw = effect.readConfig("ManagedClasses", "");
         this.classConfig = new Map(); // cls → { style, duration }
-        raw.split(",").forEach(entry => {
+        raw.split(",").forEach((entry) => {
             const trimmed = entry.trim();
             if (!trimmed) return;
             const parts = trimmed.split(":");
-            const cls   = (parts[0] || "").trim().toLowerCase();
+            const cls = (parts[0] || "").trim().toLowerCase();
             if (!cls) return;
             const rawStyle = (parts[1] || "").trim();
-            const style    = STYLE_NAMES.includes(rawStyle) ? rawStyle : "Smooth";
-            const rawMs    = parseInt(parts[2], 10);
-            const duration = animationTime(!isNaN(rawMs) && rawMs > 0 ? rawMs : DEFAULT_DURATION_MS);
+            const style = STYLE_NAMES.includes(rawStyle) ? rawStyle : "Smooth";
+            const rawMs = parseInt(parts[2], 10);
+            const duration = animationTime(
+                !isNaN(rawMs) && rawMs > 0 ? rawMs : DEFAULT_DURATION_MS,
+            );
             this.classConfig.set(cls, { style, duration });
         });
 
         // Shared fallback for temporary slots — see header comment.
         const rawTempStyle = effect.readConfig("TempSlotStyle", "Smooth");
-        this.tempSlotStyle = STYLE_NAMES.includes(rawTempStyle) ? rawTempStyle : "Smooth";
-        const rawTempMs = parseInt(effect.readConfig("TempSlotDurationMs", DEFAULT_DURATION_MS), 10);
-        this.tempSlotDuration = animationTime(!isNaN(rawTempMs) && rawTempMs > 0 ? rawTempMs : DEFAULT_DURATION_MS);
+        this.tempSlotStyle = STYLE_NAMES.includes(rawTempStyle)
+            ? rawTempStyle
+            : "Smooth";
+        const rawTempMs = parseInt(
+            effect.readConfig("TempSlotDurationMs", DEFAULT_DURATION_MS),
+            10,
+        );
+        this.tempSlotDuration = animationTime(
+            !isNaN(rawTempMs) && rawTempMs > 0
+                ? rawTempMs
+                : DEFAULT_DURATION_MS,
+        );
+        const rawDockStyle = effect.readConfig("dockStyle", "Smooth");
+        this.dockStyle = STYLE_NAMES.includes(rawDockStyle)
+            ? rawDockStyle
+            : "Smooth";
+        const rawDockMs = parseInt(
+            effect.readConfig("dockDurationMs", 250),
+            10,
+        );
+        this.dockDuration = animationTime(
+            !isNaN(rawDockMs) && rawDockMs > 0
+                ? rawDockMs
+                : DEFAULT_DURATION_MS,
+        );
+        const rawOffset = parseInt(effect.readConfig("dockOffsetPx", 24), 10);
+        this.dockOffsetPx = isNaN(rawOffset) ? 24 : Math.max(1, rawOffset);
 
-        console.log("[dropdown-slide effect] loaded config — managedClasses=[" +
-            Array.from(this.classConfig.entries())
-                .map(([cls, cfg]) => cls + ":" + cfg.style + ":" + cfg.duration + "ms")
-                .join(", ") + "], tempSlotFallback=" + this.tempSlotStyle + ":" + this.tempSlotDuration + "ms");
+        console.log(
+            "[dropdown-slide effect] loaded config — managedClasses=[" +
+                Array.from(this.classConfig.entries())
+                    .map(
+                        ([cls, cfg]) =>
+                            cls + ":" + cfg.style + ":" + cfg.duration + "ms",
+                    )
+                    .join(", ") +
+                "], tempSlotFallback=" +
+                this.tempSlotStyle +
+                ":" +
+                this.tempSlotDuration +
+                "ms",
+        );
     }
 
     manage(window) {
-        window.dropdownSlideData = { createdTime: Date.now(), animationInstances: 0 };
+        window.dropdownSlideData = {
+            createdTime: Date.now(),
+            animationInstances: 0,
+        };
         window.windowFrameGeometryChanged.connect(
-            this.onWindowFrameGeometryChanged.bind(this)
+            this.onWindowFrameGeometryChanged.bind(this),
         );
     }
 
     // Returns the matched class key from classConfig (window.windowClass is
     // a space-separated "resourceClass resourceName"-style string), or null.
     matchClass(windowClass) {
-        const parts = String(windowClass || "").toLowerCase().split(" ");
+        const parts = String(windowClass || "")
+            .toLowerCase()
+            .split(" ");
         for (const part of parts) {
             if (this.classConfig.has(part)) return part;
         }
@@ -154,11 +197,13 @@ class DropdownSlideEffect {
         if (matchedClass) {
             ({ style, duration } = this.classConfig.get(matchedClass));
         } else if (window.skipSwitcher) {
-            // Not a pre-registered class — likely a temporary slot's bound
-            // window (see header comment). Use the shared fallback instead
-            // of leaving it unanimated.
-            style = this.tempSlotStyle;
-            duration = this.tempSlotDuration;
+            if (this.isDockWindow(window)) {
+                style = this.dockStyle;
+                duration = this.dockDuration;
+            } else {
+                style = this.tempSlotStyle;
+                duration = this.tempSlotDuration;
+            }
         } else {
             return; // not one of ours
         }
@@ -172,11 +217,16 @@ class DropdownSlideEffect {
         const yDelta = newGeometry.y - oldGeometry.y;
         const widthDelta = newGeometry.width - oldGeometry.width;
         const heightDelta = newGeometry.height - oldGeometry.height;
-        if (xDelta === 0 && yDelta === 0 && widthDelta === 0 && heightDelta === 0) {
+        if (
+            xDelta === 0 &&
+            yDelta === 0 &&
+            widthDelta === 0 &&
+            heightDelta === 0
+        ) {
             return;
         }
 
-        const widthRatio  = oldGeometry.width  / newGeometry.width;
+        const widthRatio = oldGeometry.width / newGeometry.width;
         const heightRatio = oldGeometry.height / newGeometry.height;
 
         const animations = [
@@ -212,6 +262,27 @@ class DropdownSlideEffect {
             curve: STYLE_CURVES[style] || STYLE_CURVES.Smooth,
             animations: animations,
         });
+    }
+
+    isDockWindow(window) {
+        const wg = window.geometry;
+        let screen = window.screen;
+        if (!wg) return false;
+        if (!screen)
+            screen =
+                effects.activeScreen ||
+                (effects.stackingOrder[0] && effects.stackingOrder[0].screen);
+        if (!screen || !screen.geometry) return false;
+        const sg = screen.geometry;
+        const o = this.dockOffsetPx;
+        if (Math.abs(wg.x + wg.width - (sg.x + o)) <= HOVER_TOLERANCE_PX)
+            return true;
+        if (Math.abs(wg.x - (sg.x + sg.width - o)) <= HOVER_TOLERANCE_PX)
+            return true;
+        if (Math.abs(wg.x - sg.x) <= HOVER_TOLERANCE_PX) return true;
+        if (Math.abs(wg.x + wg.width - (sg.x + sg.width)) <= HOVER_TOLERANCE_PX)
+            return true;
+        return false;
     }
 }
 

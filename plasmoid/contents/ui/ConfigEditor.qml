@@ -54,6 +54,18 @@ Item {
     property string releaseTempSlotShortcut: "Meta+Shift+X"
     property string listShortcutsShortcut:   "Meta+Shift+S"
 
+    // Dock (global) — shared offset + the three dock shortcuts. Defaults
+    // mirror main.js readDockOffset()/readConfig keys exactly (fixed by A3).
+    property int    dockOffsetPx:           24
+    property string dockLeftShortcut:       "Ctrl+Shift+Left"
+    property string dockRightShortcut:      "Ctrl+Shift+Right"
+    property string dockReleaseAllShortcut: "Ctrl+Shift+H"
+
+    // Dock animation — style/duration for parked/expanded dock windows.
+    // Defaults mirror effect/contents/code/main.js readConfig keys exactly.
+    property string dockStyle:     "Smooth"
+    property int    dockDurationMs: 250
+
     // Shared fallback animation for temporary slots — the slide effect can't
     // look up a per-slot style/duration for these (class unknown ahead of
     // time), so all temporary slots share this one instead.
@@ -123,6 +135,12 @@ Item {
             resizeWidthDecShortcut  = data.resizeWidthDecShortcut  || "Alt+Shift+Left"
             releaseTempSlotShortcut = data.releaseTempSlotShortcut || "Meta+Shift+X"
             listShortcutsShortcut   = data.listShortcutsShortcut   || "Meta+Shift+S"
+            dockOffsetPx           = data.dockOffsetPx           !== undefined ? data.dockOffsetPx : 24
+            dockLeftShortcut       = data.dockLeftShortcut       || "Ctrl+Shift+Left"
+            dockRightShortcut      = data.dockRightShortcut      || "Ctrl+Shift+Right"
+            dockReleaseAllShortcut = data.dockReleaseAllShortcut || "Ctrl+Shift+H"
+            dockStyle            = data.dockStyle            || "Smooth"
+            dockDurationMs       = data.dockDurationMs       !== undefined ? data.dockDurationMs : 250
             tempSlotAnimationStyle    = data.tempSlotAnimationStyle    || "Smooth"
             tempSlotAnimationDuration = data.tempSlotAnimationDuration !== undefined ? data.tempSlotAnimationDuration : 250
             regularSlotModel.clear()
@@ -400,6 +418,12 @@ Item {
             resizeWidthDecShortcut:  resizeWidthDecShortcut,
             releaseTempSlotShortcut: releaseTempSlotShortcut,
             listShortcutsShortcut:   listShortcutsShortcut,
+            dockOffsetPx:          dockOffsetPx,
+            dockLeftShortcut:      dockLeftShortcut,
+            dockRightShortcut:     dockRightShortcut,
+            dockReleaseAllShortcut: dockReleaseAllShortcut,
+            dockStyle:             dockStyle,
+            dockDurationMs:        dockDurationMs,
             tempSlotAnimationStyle:    tempSlotAnimationStyle,
             tempSlotAnimationDuration: tempSlotAnimationDuration
         })
@@ -1558,7 +1582,10 @@ Item {
                             { label: qsTr("Increase width"),                  prop: "resizeWidthIncShortcut" },
                             { label: qsTr("Decrease width"),                  prop: "resizeWidthDecShortcut" },
                             { label: qsTr("Release active temp slot"),        prop: "releaseTempSlotShortcut" },
-                            { label: qsTr("List slots/tiles + shortcuts"),    prop: "listShortcutsShortcut" }
+                            { label: qsTr("List slots/tiles + shortcuts"),    prop: "listShortcutsShortcut" },
+                            { label: qsTr("Dock focused window to left edge"),  prop: "dockLeftShortcut" },
+                            { label: qsTr("Dock focused window to right edge"), prop: "dockRightShortcut" },
+                            { label: qsTr("Release all docked windows"),         prop: "dockReleaseAllShortcut" }
                         ]
                         delegate: RowLayout {
                             spacing: Kirigami.Units.smallSpacing
@@ -1582,7 +1609,105 @@ Item {
                 }
             }
 
-            // ── Developer options ─────────────────────────────────────────────
+                // ── Dock ─────────────────────────────────────────────────────────
+                // Global offset for the dock feature: any focused window is parked
+                // at its own screen's left/right edge with a dockOffsetPx sliver
+                // visible. Applies on script reload, which save triggers.
+                Kirigami.Card {
+                    Layout.fillWidth: true
+
+                    header: Kirigami.Heading {
+                        level: 3
+                        padding: Kirigami.Units.smallSpacing
+                        text: qsTr("Dock")
+                    }
+
+                    contentItem: ColumnLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Controls.Label {
+                                text: qsTr("Visible sliver width")
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.fillWidth: true
+                            }
+
+                            Controls.SpinBox {
+                                Layout.preferredWidth: 120
+                                from: 1; to: 400; stepSize: 4
+                                value: root.dockOffsetPx
+                                editable: true
+                                textFromValue: function(v) { return v + qsTr(" px") }
+                                valueFromText: function(t) {
+                                    var n = parseInt(t)
+                                    return isNaN(n) ? from : Math.max(from, Math.min(to, n))
+                                }
+                                onValueModified: {
+                                    root.dockOffsetPx = value
+                                    dirty = true
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Controls.Label {
+                                text: qsTr("Style")
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            Controls.ComboBox {
+                                Layout.preferredWidth: 130
+                                model: ["Smooth", "Elastic", "Bounce", "Back", "Linear", "Flip3D"]
+                                currentIndex: {
+                                    var idx = root.styleValues.indexOf(root.dockStyle)
+                                    return idx >= 0 ? idx : 0
+                                }
+                                onActivated: function(idx) {
+                                    root.dockStyle = root.styleValues[idx]
+                                    dirty = true
+                                }
+                            }
+
+                            Controls.Label {
+                                text: qsTr("Duration")
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            Controls.SpinBox {
+                                Layout.preferredWidth: 120
+                                from: 50; to: 1000; stepSize: 50
+                                value: root.dockDurationMs
+                                editable: true
+                                textFromValue: function(v) { return v + qsTr(" ms") }
+                                valueFromText: function(t) {
+                                    var n = parseInt(t)
+                                    return isNaN(n) ? from : Math.max(from, Math.min(to, n))
+                                }
+                                onValueModified: {
+                                    root.dockDurationMs = value
+                                    dirty = true
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        Controls.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: Kirigami.Theme.disabledTextColor
+                            text: qsTr("Applies to any focused window. Minimized, maximized, fullscreen, and panel windows are skipped. Ctrl+Shift+Left / Ctrl+Shift+Right may collide with in-app shortcuts — remap in System Settings → Shortcuts if a second registration loses. The offset applies after the script reloads (Apply saves and reloads).")
+                        }
+                    }
+                }
+
+                // ── Developer options ─────────────────────────────────────────────
             Kirigami.Card {
                 Layout.fillWidth: true
 
